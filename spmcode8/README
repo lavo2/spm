@@ -1,0 +1,4 @@
+ff_chol_mdf: The block-based Cholesky factorization algorithm is implemented in this file, requires the Itel MKL library. However, it is possible to compile the code with "fake" macro operations (i.e., without the MKL), just compile with the flag -DDO_NOTHING.
+
+For real exacution of the algorithm (i.e., once installed the MKL) then chol1024.bin is a valid input of a matric having size 1024x1024 in binary format.
+
