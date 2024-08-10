@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <omp.h>
 
+// OMP_NUM_THREADS=16 ./omp_hello to run with 16 threads
+
 int main() {
   #pragma omp parallel
   {  // <- spawning of threads

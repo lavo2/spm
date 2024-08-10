@@ -1,4 +1,4 @@
-CXX                = g++ -std=c++20
+CXX                = g++-14 -std=c++20
 OPTFLAGS	   = -O3
 CXXFLAGS          += -Wall 
 AUTOFLAGS          = -march=native -ffast-math -mavx2
