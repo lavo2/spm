@@ -5,14 +5,14 @@
 
 using namespace ff;
 
-using task_t=std::pair<float, size_t>;
+using my_task_t=std::pair<float, size_t>;
 const size_t minVsize = 512;
 const size_t maxVsize = 8192;
 
 
-struct Source: ff_node_t<task_t> {
+struct Source: ff_node_t<my_task_t> {
     Source(const size_t length):length(length) {}
-    task_t* svc(task_t*) {
+    my_task_t* svc(my_task_t*) {
 		auto random01= []() {
 			static std::mt19937 generator;
 			std::uniform_real_distribution<float> distribution(0,1);
@@ -26,15 +26,15 @@ struct Source: ff_node_t<task_t> {
         for(size_t i=0; i<length; ++i) {
 			float x     = random01();
 			size_t size = random(minVsize, maxVsize);
-			ff_send_out(new task_t(x, size));
+			ff_send_out(new my_task_t(x, size));
         }
         return EOS;
     }
 	
     const size_t length;
 };
-struct dotProd: ff_node_t<task_t, float> {
-    float* svc(task_t* task) {
+struct dotProd: ff_node_t<my_task_t, float> {
+    float* svc(my_task_t* task) {
 		union {
 			float r;
 			float* ptr;
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
     Source  first(length);
     Sink    third;
 
-    ff_Farm<task_t,float> farm(
+    ff_Farm<my_task_t,float> farm(
 							   [&]() {
 								   std::vector<std::unique_ptr<ff_node> > W;
 								   for(auto i=0;i<nworkers;++i)
