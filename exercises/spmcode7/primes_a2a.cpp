@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
     const size_t  size  = (n2 - n1) / Lw;
     ssize_t       more  = (n2-n1) % Lw;
     ull           start = n1;
-	ull           stop  = n1;
+	  ull           stop  = n1;
 
     std::vector<ff_node*> LW;
     std::vector<ff_node*> RW;
