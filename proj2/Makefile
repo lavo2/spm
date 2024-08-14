@@ -13,7 +13,9 @@ LDFLAGS 	= -pthread
 OPTFLAGS	= -O3 -ffast-math -DNDEBUG
 
 TARGETS		= compdecomp \
-		  ffc_farm
+		  ffc_farm \
+		  mainff \
+		  mainffa2a 
 
 .PHONY: all clean cleanall
 .SUFFIXES: .cpp 
@@ -27,7 +29,10 @@ all		: $(TARGETS)
 mainseq	: mainseq.cpp utility.hpp
 	$(CXX) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c
 
-ffc_farm       : ffc_farm.cpp utility.hpp cmdline.hpp datatask.hpp reader.hpp worker.hpp writer.hpp
+mainff       : mainff.cpp utility.hpp cmdline.hpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
+
+mainffa2a       : mainffa2a.cpp utility.hpp cmdlinea2a.hpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
 

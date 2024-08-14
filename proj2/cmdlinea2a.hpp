@@ -25,7 +25,8 @@
 #include <utility.hpp>
 
 // some global variables. A few others are in utility.hpp -----------------------------------
-static long nworkers=0;  // the number of farm Workers
+static long lworkers=0;  // the number of left Workers
+static long rworkers=0;  // the number of right Workers
 static bool cc=false;    // concurrency control, default is blocking
 static bool aN=1;        // parameter of the set_scheduling_ondemand (i.e. channel's capacity
 // ------------------------------------------------------------------------------------------
@@ -34,7 +35,8 @@ static inline void usage(const char *argv0) {
     std::printf("--------------------\n");
     std::printf("Usage: %s [options] file-or-directory [file-or-directory]\n",argv0);
     std::printf("\nOptions:\n");
-    std::printf(" -n set the n. of Workers (default nworkers=%ld)\n", ff_numCores());
+    std::printf(" -l set the n. of Left Workers (default nworkers=2\n");
+	std::printf(" -w set the n. of Right Workers (default nworkers=%ld)\n", ff_numCores()-2);
     std::printf(" -t set the \"BIG file\" low threshold (in Mbyte -- min. and default %ld Mbyte)\n",BIGFILE_LOW_THRESHOLD/(1024*1024) );
     std::printf(" -r 0 does not recur, 1 will process the content of all subdirectories (default r=0)\n");
     std::printf(" -C compress: 0 preserves, 1 removes the original file (default C=0)\n");
@@ -49,14 +51,23 @@ int parseCommandLine(int argc, char *argv[]) {
     extern char *optarg;
     const std::string optstr="n:t:r:C:D:q:a:b:";
     
-    nworkers = ff_numCores();
+    lworkers = 2;
+	rworkers = ff_numCores()-2;
     long opt, aN = 1, start = 1;
     bool cpresent=false, dpresent=false;
     while((opt = getopt(argc, argv, optstr.c_str())) != -1) {
 	switch(opt) {
-	case 'n': {
-	    if (!isNumber(optarg, nworkers)) {
-		std::fprintf(stderr, "Error: wrong '-n' option\n");
+	case 'l': {
+	    if (!isNumber(optarg, lworkers)) {
+		std::fprintf(stderr, "Error: wrong '-l' option\n");
+		usage(argv[0]);
+		return -1;
+	    }
+	    start+=2;
+	} break;
+	case 'w': {
+	    if (!isNumber(optarg, rworkers)) {
+		std::fprintf(stderr, "Error: wrong '-e' option\n");
 		usage(argv[0]);
 		return -1;
 	    }
