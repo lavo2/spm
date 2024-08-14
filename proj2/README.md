@@ -1,12 +1,12 @@
 o compress
 
-./ffc_farm -C 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small"  
-./ffc_farm -D 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small"  
+./mainseq -C 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small"  
+./mainseq -D 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small"  
 
 Note that without -r 1 we need to select a specific file, for example;
 
-./ffc_farm -C 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small/file_1KB.txt" 
-./ffc_farm -D 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small/file_1KB.txt.zip" 
+./mainseq -C 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small/file_1KB.txt" 
+./mainseq -D 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small/file_1KB.txt.zip" 
 
 Usage: ./ffc_farm [options] file-or-directory [file-or-directory]
 

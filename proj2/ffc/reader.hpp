@@ -20,6 +20,7 @@
 
 #include <ff/ff.hpp>
 #include <datatask.hpp>
+#include <utility.hpp>
 
 // reader node, this is the "Emitter" of the FastFlow farm 
 struct Read: ff::ff_node_t<Task> {
