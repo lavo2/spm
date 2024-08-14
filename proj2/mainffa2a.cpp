@@ -25,7 +25,7 @@
 #include <ff/all2all.hpp>
 using namespace ff;
 
-/*
+
 // TODO: modify the following for a2a 
 struct Task {
     Task(unsigned char *ptr, size_t size, const std::string &name):
@@ -40,8 +40,41 @@ struct Task {
     const std::string filename;      // source file name  
 };
 
+
+struct L_Worker : ff_monode_t<Task>{
+	L_Worker(const int npartitions):npartitions(npartitions) {}
+
+    const int npartitions; // number of partitions
+     
+    Task *svc(Task *task) {
+
+        const int nw = get_num_outchannels(); // gets the total number of workers added to the farm
+
+        std::cout << "L_Worker" << std::endl;
+        for (int i=0; i<npartitions; ++i) {
+            Task *t = new Task(task->ptr, task->size, task->filename);
+            ff_send_out(t);
+        }
+        
+        return EOS;
+
+    }
+};
+
+struct R_Worker : ff_minode_t<Task> {
+    R_Worker(const size_t Lw):Lw(Lw) {}
+    Task *svc(Task *in) {
+        
+        std::cout << "R_Worker" << std::endl;
+
+        return GO_ON;
+    }
+
+    const size_t Lw;
+};
+/*
 // generates the partitions
-class L_Worker: public ff_monode_t<Task> { 
+struct L_Worker: public ff_monode_t<Task> { 
     //L_Worker(const char **argv, int argc): argv(argv), argc(argc) {}  // must be multi-output
     public:
 
@@ -69,13 +102,6 @@ class L_Worker: public ff_monode_t<Task> {
 		}
 		return true;
     }
-
-    unsigned int countPartition() {
-        unsigned int npartition = 0;
-        for (auto &t: partitions) {
-            if (doWorkCompress(t.first, t.second)) ++npartition;
-        }
-    
     
     bool walkDir(const std::string &dname) {
 		DIR *dir;	
@@ -219,8 +245,7 @@ struct R_Worker: ff_minode_t<Task_t> { // must be multi-input
     std::vector<ull> results;
     const size_t Lw;
 };
-*/
-
+*/  
 
 int main(int argc, char *argv[]) {    
     if (argc < 2) {
@@ -230,6 +255,53 @@ int main(int argc, char *argv[]) {
     // parse command line arguments and set some global variables
     long start=parseCommandLine(argc, argv);
     if (start<0) return -1;
+
+    //check if the path is a directory or a file and get infos
+    struct stat statbuf;
+    
+    if (stat(argv[start], &statbuf)==-1) {
+        perror("stat");
+        std::fprintf(stderr, "Error: stat %s\n", argv[start]);
+        return -1;
+    }
+    if (S_ISDIR(statbuf.st_mode)) {
+        std::cout << argv[start] << " is a directory" << std::endl;
+		unsigned long long nfiles = 0; 
+		unsigned long long dirsize = 0;
+		if (countFiles(argv[start], nfiles, dirsize) == 0) {
+            std::fprintf(stderr, "Error: %s is empty\n", argv[start]);
+            return -1;
+        }
+		std::cout << "Number of files: " << nfiles << std::endl;
+		std::cout << "Directory size in kb: " << dirsize/1024 << std::endl;
+
+    } else {
+        if (statbuf.st_size==0) {
+            std::fprintf(stderr, "Error: %s has size 0\n", argv[start]);
+            return -1;
+        }
+        std::cout << argv[start] << " is a file" <<" of size: " <<statbuf.st_size/1024<<"kb"<<std::endl;
+    }
+
+	std::vector<FileData> fileDataVec;
+    
+    if (!walkDirAndGetPtr(argv[start], fileDataVec)) {
+        std::cerr << "Failed to walk directory" << std::endl;
+    }
+
+	if (VERBOSE){
+		for (auto& fileData : fileDataVec) {
+			// print fileData.filename, fileData.size, fileData.ptr
+			std::cout << "File: " << fileData.filename 
+					<< ", Size: " << fileData.size 
+					<< std::endl;
+		}
+	}
+
+	// ora che ho i files provare a implementare a2a solo per stampare a qualche thread è associato quale file
+ 
+
+
     /*
     bool print_primes = false;
     if (argc >= 6)  print_primes = (std::string(argv[5]) == "on");
@@ -284,6 +356,10 @@ int main(int argc, char *argv[]) {
     std::cout << "Time: " << ffTime(GET_TIME) << " (ms)\n";
     std::cout << "A2A Time: " << a2a.ffTime() << " (ms)\n";
 	*/
+	for (auto& fileData : fileDataVec) {
+		if(fileData.ptr != nullptr)
+			unmapFile(fileData.ptr, fileData.size);
+		}
     std::cout << "test!" << std::endl;
     return 0;
 }

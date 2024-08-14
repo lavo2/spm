@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <string>
 #include <stdexcept>
+#include <vector>
 
 
 #include <miniz/miniz.h>
@@ -46,7 +47,8 @@
 static bool comp = true;                      // by default, it compresses 
 static size_t BIGFILE_LOW_THRESHOLD=2097152;  // 2Mbytes threshold 
 static bool REMOVE_ORIGIN=false;              // Does it keep the origin file?
-static int  QUITE_MODE=1;                     // 0 silent, 1 only errors, 2 everything
+static int  QUITE_MODE=1; 					 // 0 silent, 1 error messages, 2 verbose
+static int  VERBOSE=0;                     	// 0 normal, 1 verbose for debugging
 static bool RECUR= false;                     // do we have to process the contents of subdirs?
 // --------------------------------------------------------------------------------------------
 
@@ -455,6 +457,125 @@ static inline bool walkDir(const char dname[], const bool comp) {
 	if (QUITE_MODE>=1) perror("readdir");
 	error=true;
     }
+    closedir(dir);
+    return !error;
+}
+
+/* New stuff */
+
+// given a path returns the number of files in the directory and the total size of the files
+
+static inline bool countFiles(const char dname[], unsigned long long &nfiles, unsigned long long &size) {
+	if (chdir(dname) == -1) {
+	if (QUITE_MODE>=1) {
+	    perror("chdir");
+	    std::fprintf(stderr, "Error: chdir %s\n", dname);
+	}
+	return false;
+	}
+	DIR *dir;	
+	if ((dir=opendir(".")) == NULL) {
+	if (QUITE_MODE>=1) {
+	    perror("opendir");
+	    std::fprintf(stderr, "Error: opendir %s\n", dname);
+	}
+	return false;
+	}
+	struct dirent *file;
+	bool error=false;
+	while((errno=0, file =readdir(dir)) != NULL) {
+	struct stat statbuf;
+	if (stat(file->d_name, &statbuf)==-1) {
+	    if (QUITE_MODE>=1) {		
+			perror("stat");
+			std::fprintf(stderr, "Error: stat %s\n", file->d_name);
+	    }
+	    return false;
+	}
+	if(S_ISDIR(statbuf.st_mode)) {
+	    if ( !isdot(file->d_name) ) {
+			if (!countFiles(file->d_name, nfiles, size)) error = true;
+	    }
+	} else {
+	    nfiles++;
+	    size += statbuf.st_size;
+	}
+	}
+	if (errno != 0) {
+	if (QUITE_MODE>=1) perror("readdir");
+	error=true;
+	}
+	closedir(dir);
+	return !error;
+}
+
+
+struct FileData {
+    unsigned char* ptr;
+    std::string filename;
+    size_t size;
+
+    // Constructor for easy initialization
+    FileData(unsigned char* p, const std::string& fname, size_t s) 
+        : ptr(p), filename(fname), size(s) {}
+};
+
+static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& fileDataVec) {
+    if (chdir(dname) == -1) {
+        if (QUITE_MODE >= 1) {
+            perror("chdir");
+            std::fprintf(stderr, "Error: chdir %s\n", dname);
+        }
+        return false;
+    }
+    DIR *dir;    
+    if ((dir = opendir(".")) == NULL) {
+        if (QUITE_MODE >= 1) {
+            perror("opendir");
+            std::fprintf(stderr, "Error: opendir %s\n", dname);
+        }
+        return false;
+    }
+    struct dirent *file;
+    bool error = false;
+    while ((errno = 0, file = readdir(dir)) != NULL) {
+        struct stat statbuf;
+        if (stat(file->d_name, &statbuf) == -1) {
+            if (QUITE_MODE >= 1) {        
+                perror("stat");
+                std::fprintf(stderr, "Error: stat %s\n", file->d_name);
+            }
+            return false;
+        }
+        if (S_ISDIR(statbuf.st_mode)) {
+            if (!isdot(file->d_name)) {
+                if (walkDirAndGetPtr(file->d_name, fileDataVec)) {
+                    if (chdir("..") == -1) {
+                        perror("chdir");
+                        std::fprintf(stderr, "Error: chdir ..\n");
+                        error = true;
+                    }
+                }
+                else {
+                    error = true;
+                }
+            }
+        } else {
+            size_t size = statbuf.st_size;
+            //std::fprintf(stderr, "File: %s\n", file->d_name);
+            unsigned char* ptr = nullptr;
+            if (!mapFile(file->d_name, size, ptr)) return false;
+
+            // Create a FileData object and store it in the vector
+            fileDataVec.emplace_back(ptr, file->d_name, size);
+        }
+    }
+    
+    if (errno != 0) {
+        if (QUITE_MODE >= 1) perror("readdir");
+        error = true;
+    }
+
     closedir(dir);
     return !error;
 }

@@ -44,12 +44,13 @@ static inline void usage(const char *argv0) {
     std::printf(" -q 0 silent mode, 1 prints only error messages to stderr, 2 verbose (default q=1)\n");
     std::printf(" -a asynchrony degree for the on-demand policy (default a=1)\n");
     std::printf(" -b 0 blocking, 1 non-blocking concurrency control (default b=0)\n");
+	std::printf(" -v 0 normal, 1 verbose for debugging\n");
     std::printf("--------------------\n");
 }
 
 int parseCommandLine(int argc, char *argv[]) {
     extern char *optarg;
-    const std::string optstr="n:t:r:C:D:q:a:b:";
+    const std::string optstr="l:w:t:r:C:D:q:a:b:v:";
     
     lworkers = 2;
 	rworkers = ff_numCores()-2;
@@ -148,6 +149,16 @@ int parseCommandLine(int argc, char *argv[]) {
 		return -1;
 	    }	    	    
 	    if (b == 1) cc = false;
+	    start +=2;
+	} break;
+	case 'v': {
+		long v=0;
+	    if (!isNumber(optarg, v)) {
+			std::fprintf(stderr, "Error: wrong '-D' option\n");
+			usage(argv[0]);
+			return -1;
+	    }
+		VERBOSE=v;
 	    start +=2;
 	} break;
 	default:
