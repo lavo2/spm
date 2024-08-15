@@ -1,15 +1,16 @@
 //
 // This example shows how to use the all2all (A2A) building block (BB).
-// It finds the prime numbers in the range (n1,n2) using the A2A.
+// It compresses/decompresses files using the A2A.
 //
 //          L-Worker --|   |--> R-Worker --|
-//                     |-->|--> R-Worker --|
+//                     |-->|--> R-Worker --|---> Merger
 //          L-Worker --|   |--> R-Worker --|  
 //      
 //
 //  -   Each L-Worker manages a partition of the initial files. It sends sub-partitions
 //      to the R-Workers in a round-robin fashion.
 //  -   Each R-Worker compresses/decompresses the files in the sub-partition received.
+//  -   The Merger reassembles the compressed/decompressed files.
 //
 
 
@@ -20,6 +21,8 @@
 #include <string>
 #include <vector>
 #include <iostream>
+
+#include <time.h>
 
 #include <ff/ff.hpp>
 #include <ff/all2all.hpp>
@@ -41,6 +44,7 @@ struct Task {
 	size_t			  nfiles=1;      // #files in a directory
     const std::string filename;      // source file name
 	bool			  compress=true;  // compress or decompress
+	bool			  isSingleBlock=true; // single block file
 };
 
 
@@ -58,17 +62,43 @@ struct L_Worker : ff::ff_monode_t<Task> {
 				Task *t = new Task(ptr+(i*BIGFILE_LOW_THRESHOLD), BIGFILE_LOW_THRESHOLD, fname);
 				t->blockid=i+1;
 				t->nblocks=fullblocks+(partialblock>0);
+				t->isSingleBlock=false;
 				ff_send_out(t); // sending to the next stage
 			}
 			if (partialblock) {
 				Task *t = new Task(ptr+(fullblocks*BIGFILE_LOW_THRESHOLD), partialblock, fname);
 				t->blockid=fullblocks+1;
 				t->nblocks=fullblocks+1;
+				t->isSingleBlock=false;
 				ff_send_out(t); // sending to the next stage
 			}
 		}
 		return true;
     }
+
+	bool doWorkDecompress(unsigned char *ptr, size_t size, const std::string &fname) {
+		std::ifstream inFile(fname, std::ios::binary);
+		if (!inFile.is_open()) {
+			std::cerr << "Failed to open input file: " << fname << std::endl;
+			return false;
+		}
+
+		// Read the header to determine if it's a single block or multi-block file
+		uint8_t header;
+		inFile.read(reinterpret_cast<char*>(&header), sizeof(header));
+		inFile.close();
+
+		if (header == 0) {
+			// Single block file
+			ff_send_out(new Task(ptr, size, fname));
+		} else {
+			// Multi-block file
+			Task *t = new Task(ptr, size, fname);
+			t->isSingleBlock=false;
+			std::cout << "Decompressing multi-block file: " << fname <<"... Devo pensare come"<< std::endl;
+		}
+		return true;
+	}
 
      
     Task *svc(Task *task) {
@@ -83,6 +113,12 @@ struct L_Worker : ff::ff_monode_t<Task> {
 			if (compr){
 				if (!doWorkCompress(file.ptr, file.size, file.filename)){
 					error("doWorkCompress\n");
+					return EOS;
+				}
+			}
+			else{
+				if (!doWorkDecompress(file.ptr, file.size, file.filename)){
+					error("doWorkDecompress\n");
 					return EOS;
 				}
 			}
@@ -123,22 +159,119 @@ struct R_Worker : ff_minode_t<Task> {
 			}
 			in->ptrOut   = ptrOut;
 			in->cmp_size = cmp_len;
-			ff_send_out(in);
+			bool oneblockfile = (in->nblocks == 1);
+            if (oneblockfile) {
+                handleSingleBlock(in);
+			} else {
+				ff_send_out(in);
+			}
 			return GO_ON;
 
 		}
-		return GO_ON;
-	}
-	/*void svc_end() {
-		if (!success) {
-			if (QUITE_MODE>=1) std::fprintf(stderr, "Worker %ld: Exiting with (some) Error(s)\n", get_my_id());
-			return;
+		else{
+			if (in->isSingleBlock) {
+				// Decompress a single block file
+				if (!decompressSingleBlock(in->filename)) {
+					delete in;
+					return GO_ON;
+				}
+			} else {
+				// Decompress a multi-block file
+				//if (!decompressMultiBlock(in)) {
+					delete in;
+					return GO_ON;
+				}
+			}
+			return GO_ON;
 		}
-    }*/
+
+	bool decompressSingleBlock(const std::string& inputFile) {
+		std::ifstream inFile(inputFile, std::ios::binary);
+		if (!inFile.is_open()) {
+			std::cerr << "Failed to open input file: " << inputFile << std::endl;
+			return false;
+		}
+
+		// Read the entire file into memory
+		inFile.seekg(0, std::ios::end);
+		size_t fileSize = inFile.tellg();
+		inFile.seekg(1, std::ios::beg);  // Skip the header byte
+
+		size_t compressedSize = fileSize - 1;  // Exclude the header byte
+		std::vector<unsigned char> compressedData(compressedSize);
+		inFile.read(reinterpret_cast<char*>(compressedData.data()), compressedSize);
+		inFile.close();
+
+		// Prepare buffer for decompression (estimate size needed)
+		size_t uncompressedSize = compressedSize * 2;  // Adjust size as needed
+		std::vector<unsigned char> uncompressedData(uncompressedSize);
+
+		// Decompress
+		if (!decompressBlock(compressedData.data(), compressedSize, uncompressedData.data(), uncompressedSize)) {
+			return false;
+		}
+
+		// Write decompressed data to output file
+		// Remove the ".zip" suffix
+		std::string outputFile = inputFile.substr(0, inputFile.size() - 4);
+		std::ofstream outFile(outputFile, std::ios::binary);
+		if (!outFile.is_open()) {
+			std::cerr << "Failed to open output file: " << outputFile << std::endl;
+			return false;
+		}
+
+		outFile.write(reinterpret_cast<char*>(uncompressedData.data()), uncompressedSize);
+		outFile.close();
+
+		return true;
+	}
+
+	bool decompressBlock(unsigned char* input, size_t inputSize, unsigned char* output, size_t& outputSize) {
+		if (uncompress(output, &outputSize, input, inputSize) != Z_OK) {
+			std::cerr << "Failed to decompress block" << std::endl;
+			return false;
+		}
+		return true;
+	}
+
+
+	void handleSingleBlock(Task* in) {
+        std::string outfile = in->filename + SUFFIX;
+        std::ofstream outFile(outfile, std::ios::binary);
+        if (!outFile.is_open()) {
+            std::cerr << "Failed to open output file: " << outfile << std::endl;
+            return;
+        }
+
+        // Write a header indicating it's a single block file
+        uint8_t header = 0; // 0 indicates a single block
+        outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
+
+        // Write the compressed data
+        outFile.write(reinterpret_cast<const char*>(in->ptrOut), in->cmp_size);
+
+        if (REMOVE_ORIGIN) {
+            unlink(in->filename.c_str());
+        }
+
+        cleanupTask(in);
+    }
+
+	void cleanupTask(Task* in) {
+        unmapFile(in->ptr, in->size);  
+        delete[] in->ptrOut;
+        delete in;
+    }
+
     
 	//bool success = true;
 	const size_t Lw;
 };
+
+
+//--------------------------------------------------------------------
+// Merger: reassemble the compressed/decompressed files
+
 
 struct Merger : ff_minode_t<Task> {
     Merger(size_t Rw) : Rw(Rw) {
@@ -170,12 +303,34 @@ private:
 
     std::unordered_map<std::string, FileMerger> fileMergers; // Keyed by filename
 
-    void handleSingleBlock(Task* in) {
+   /*void handleSingleBlock(Task* in) {
         std::string outfile = in->filename + SUFFIX;
         bool success = writeFile(outfile, in->ptrOut, in->cmp_size);
         if (success && REMOVE_ORIGIN) {
             unlink(in->filename.c_str());
         }
+        cleanupTask(in);
+    }*/
+
+	void handleSingleBlock(Task* in) {
+        std::string outfile = in->filename + SUFFIX;
+        std::ofstream outFile(outfile, std::ios::binary);
+        if (!outFile.is_open()) {
+            std::cerr << "Failed to open output file: " << outfile << std::endl;
+            return;
+        }
+
+        // Write a header indicating it's a single block file
+        uint8_t header = 0; // 0 indicates a single block
+        outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
+
+        // Write the compressed data
+        outFile.write(reinterpret_cast<const char*>(in->ptrOut), in->cmp_size);
+
+        if (REMOVE_ORIGIN) {
+            unlink(in->filename.c_str());
+        }
+
         cleanupTask(in);
     }
 
@@ -193,13 +348,43 @@ private:
         delete in; // Cleanup task
     }
 
-    void regroupAndZip(const std::string &outputFilename, FileMerger& fileMerger) {
+    /*void regroupAndZip(const std::string &outputFilename, FileMerger& fileMerger) {
         std::ofstream outFile(outputFilename, std::ios::binary);
         if (!outFile.is_open()) {
             std::cerr << "Failed to open output file: " << outputFilename << std::endl;
             return;
         }
 
+        std::sort(fileMerger.partitions.begin(), fileMerger.partitions.end(),
+                  [](const Partition& a, const Partition& b) {
+                      return a.npart < b.npart;
+                  });
+
+        for (const auto& part : fileMerger.partitions) {
+            outFile.write(reinterpret_cast<const char*>(part.ptr), part.size_part);
+            delete[] part.ptr;  // Clean up memory after use
+        }
+
+        outFile.close();
+    }*/
+
+	void regroupAndZip(const std::string &outputFilename, FileMerger& fileMerger) {
+        std::ofstream outFile(outputFilename, std::ios::binary);
+        if (!outFile.is_open()) {
+            std::cerr << "Failed to open output file: " << outputFilename << std::endl;
+            return;
+        }
+
+        // Write a header indicating it's a multi-block file
+        uint8_t header = fileMerger.partitions.size(); // Number of blocks
+        outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
+
+        // Write the size of each block
+        for (const auto& part : fileMerger.partitions) {
+            outFile.write(reinterpret_cast<const char*>(&part.size_part), sizeof(size_t));
+        }
+
+        // Write the actual data
         std::sort(fileMerger.partitions.begin(), fileMerger.partitions.end(),
                   [](const Partition& a, const Partition& b) {
                       return a.npart < b.npart;
@@ -232,6 +417,7 @@ int main(int argc, char *argv[]) {
     if (start<0) return -1;
 
 	ffTime(START_TIME);
+	
 
 	std::vector<FileData> fileDataVec;
     
@@ -313,8 +499,9 @@ int main(int argc, char *argv[]) {
     }
 
 	ffTime(STOP_TIME);
-	std::cout << "Time: " << ffTime(GET_TIME) << " (ms)\n";
-    std::cout << "A2A Time: " << pipe.ffTime() << " (ms)\n";
+	
+    std::cout << "Time: " << ffTime(GET_TIME) << " (ms)\n";
+    std::cout << "pipe(A2A, merger) Time: " << pipe.ffTime() << " (ms)\n";
 
 	// -----------------------------------------------
 	

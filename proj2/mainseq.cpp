@@ -16,6 +16,9 @@
  */
 
 #include <utility.hpp>
+#include <time.h>
+#include<ff/ff.hpp>
+using namespace ff;
 
 static inline void usage(const char *argv0) {
     printf("--------------------\n");
@@ -34,6 +37,7 @@ int main(int argc, char *argv[]) {
       usage(argv[0]);
       return -1;
   }
+  
   const char *pMode = argv[1];
   --argc;
   if (!strchr("cCdD", pMode[0])) {
@@ -41,6 +45,9 @@ int main(int argc, char *argv[]) {
       usage(argv[0]);
       return -1;
   }
+  //clock_t start_time = clock();  // Start timing
+  ffTime(START_TIME);
+
   const bool compress = ((pMode[0] == 'c') || (pMode[0] == 'C'));
   REMOVE_ORIGIN = ((pMode[0] == 'C') || (pMode[0] == 'D'));
   
@@ -61,10 +68,15 @@ int main(int argc, char *argv[]) {
       }
       --argc;
   }
+  ffTime(STOP_TIME);
   if (!success) {
       printf("Exiting with (some) Error(s)\n");
       return -1;
   }
-  printf("Exiting with Success\n");
+
+    printf("Time: %f (ms)\n", ffTime(GET_TIME));
+  
+
+
   return 0;
 }

@@ -15,7 +15,8 @@ OPTFLAGS	= -O3 -ffast-math -DNDEBUG
 TARGETS		= compdecomp \
 		  ffc_farm \
 		  mainff \
-		  mainffa2a 
+		  mainffa2a \
+		  mainseq
 
 .PHONY: all clean cleanall
 .SUFFIXES: .cpp 
