@@ -580,4 +580,31 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
     return !error;
 }
 
+bool compareBySize(const FileData& a, const FileData& b) {
+    return a.size > b.size;
+}
+
+std::vector<std::vector<FileData>> distributeFiles(const std::vector<FileData>& files, int n) {
+    // Sort files by size in descending order
+    std::vector<FileData> sortedFiles = files;
+    std::sort(sortedFiles.begin(), sortedFiles.end(), compareBySize);
+
+    // Initialize n groups
+    std::vector<std::vector<FileData>> groups(n);
+    std::vector<size_t> groupSizes(n, 0); // Track the total size of each group
+
+    // Distribute files to groups
+    for (const auto& file : sortedFiles) {
+        // Find the group with the smallest total size
+        auto minGroup = std::min_element(groupSizes.begin(), groupSizes.end());
+        int index = std::distance(groupSizes.begin(), minGroup);
+
+        // Add the file to this group
+        groups[index].push_back(file);
+        groupSizes[index] += file.size; // Update the total size of the group
+    }
+
+    return groups;
+}
+
 #endif 

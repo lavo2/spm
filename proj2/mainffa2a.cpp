@@ -37,53 +37,19 @@ struct Task {
     size_t            cmp_size=0;    // output size
     size_t            blockid=1;     // block identifier (for "BIG files")
     size_t            nblocks=1;     // #blocks in which a "BIG file" is split
-    const std::string filename;      // source file name  
+	size_t			  nfiles=1;      // #files in a directory
+    const std::string filename;      // source file name
+	bool			  compress=true;  // compress or decompress
 };
 
 
-struct L_Worker : ff_monode_t<Task>{
-	L_Worker(const int npartitions):npartitions(npartitions) {}
+struct L_Worker : ff::ff_monode_t<Task> {
+    L_Worker(const std::vector<FileData>& group, bool compr) : group(group), compr(compr) {}
 
-    const int npartitions; // number of partitions
-     
-    Task *svc(Task *task) {
-
-        const int nw = get_num_outchannels(); // gets the total number of workers added to the farm
-
-        std::cout << "L_Worker" << std::endl;
-        for (int i=0; i<npartitions; ++i) {
-            Task *t = new Task(task->ptr, task->size, task->filename);
-            ff_send_out(t);
-        }
-        
-        return EOS;
-
-    }
-};
-
-struct R_Worker : ff_minode_t<Task> {
-    R_Worker(const size_t Lw):Lw(Lw) {}
-    Task *svc(Task *in) {
-        
-        std::cout << "R_Worker" << std::endl;
-
-        return GO_ON;
-    }
-
-    const size_t Lw;
-};
-/*
-// generates the partitions
-struct L_Worker: public ff_monode_t<Task> { 
-    //L_Worker(const char **argv, int argc): argv(argv), argc(argc) {}  // must be multi-output
-    public:
-
-    bool doWorkCompress(const std::string& fname, size_t size) {
-		unsigned char *ptr = nullptr;
-		if (!mapFile(fname.c_str(), size, ptr)) return false;
+	bool doWorkCompress(unsigned char *ptr, size_t size, const std::string &fname) {
 		if (size<= BIGFILE_LOW_THRESHOLD) {
-			Task *t = new Task(ptr, size, fname);
-			ff_send_out(t); // sending to the next stage
+			//Task *t = new Task(ptr, size, fname);
+			ff_send_out(new Task(ptr, size, fname)); // sending to the next stage
 		} else {
 			const size_t fullblocks  = size / BIGFILE_LOW_THRESHOLD;
 			const size_t partialblock= size % BIGFILE_LOW_THRESHOLD;
@@ -102,150 +68,91 @@ struct L_Worker: public ff_monode_t<Task> {
 		}
 		return true;
     }
-    
-    bool walkDir(const std::string &dname) {
-		DIR *dir;	
-		if ((dir=opendir(dname.c_str())) == NULL) {
-			if (QUITE_MODE>=1) {
-				perror("opendir");
-				std::fprintf(stderr, "Error: opendir %s\n", dname.c_str());
+
+     
+    Task *svc(Task *task) {
+
+        const int nw = get_num_outchannels(); // gets the total number of workers added to the farm
+
+		std::cout << "L_Worker, current worker: " << get_my_id() 
+        << " Number of Workers: " << nw << " Number of Files: " << group.size() << std::endl;
+        for (size_t i = 0; i < group.size(); ++i) {
+			const FileData& file = group[i];
+			//std::cout << "  " << file.filename << " (Size: " << file.size << ")\n";
+			if (compr){
+				if (!doWorkCompress(file.ptr, file.size, file.filename)){
+					error("doWorkCompress\n");
+					return EOS;
+				}
 			}
-			return false;
+			//ff_send_out(new Task(file.ptr, file.size, file.filename));
 		}
-		struct dirent *file;
-		bool error=false;
-		while((errno=0, file =readdir(dir)) != NULL) {
-			if (comp && discardIt(file->d_name, true)) {
-				if (QUITE_MODE>=2)
-					std::fprintf(stderr, "%s has already a %s suffix -- ignored\n", file->d_name, SUFFIX);		
-				continue;
-			}
-			struct stat statbuf;
-			std::string filename = dname + "/" + file->d_name;
-			if (stat(filename.c_str(), &statbuf)==-1) {
-				if (QUITE_MODE>=1) {
-					perror("stat");
-					std::fprintf(stderr, "Error: stat %s (dname=%s)\n", filename.c_str(), dname.c_str());
-				}
-				continue;
-			}
-			if(S_ISDIR(statbuf.st_mode)) {
-				assert(RECUR);
-				if ( !isdot(filename.c_str()) ) {
-					if (!walkDir(filename)) error = true;
-				}
-			} else {
-				if (!comp && discardIt(filename.c_str(), false)) {
-					if (QUITE_MODE>=2)
-						std::fprintf(stderr, "%s does not have a %s suffix -- ignored\n", filename.c_str(), SUFFIX);
-					continue;
-				}
-				if (statbuf.st_size==0) {
-					if (QUITE_MODE>=2)
-						std::fprintf(stderr, "%s has size 0 -- ignored\n", filename.c_str());
-					continue;		    
-				}
-				if (!doWork(filename, statbuf.st_size)) error = true;
-			}
-		}
-		if (errno != 0) {
-			if (QUITE_MODE>=1) perror("readdir");
-			error=true;
-		}
-		closedir(dir);
-		return !error;
-    }    
-    // ------------------- fastflow svc and svc_end methods 
-	
-    Task *svc(Task *) {
-		for(long i=0; i<argc; ++i) {
-			if (comp && discardIt(argv[i], true)) {
-				if (QUITE_MODE>=2) 
-					std::fprintf(stderr, "%s has already a %s suffix -- ignored\n", argv[i], SUFFIX);
-				continue;
-			}
-			struct stat statbuf;
-			if (stat(argv[i], &statbuf)==-1) {
-				if (QUITE_MODE>=1) {
-					perror("stat");
-					std::fprintf(stderr, "Error: stat %s\n", argv[i]);
-				}
-				continue;
-			}
-			if (S_ISDIR(statbuf.st_mode)) {
-				if (!RECUR) continue;
-				success &= walkDir(argv[i]);
-			} else {
-				if (!comp && discardIt(argv[i], false)) {
-					if (QUITE_MODE>=2)
-						std::fprintf(stderr, "%s does not have a %s suffix -- ignored\n", argv[i], SUFFIX);
-					continue;
-				}
-				if (statbuf.st_size==0) {
-					if (QUITE_MODE>=2)
-						std::fprintf(stderr, "%s has size 0 -- ignored\n", argv[i]);
-					continue;		    
-				}
-				//success &= doWork(argv[i], statbuf.st_size);
-  
-			}
-            if (!success) {
-                std::fprintf(stderr, "Errore: SUCCESS %s\n", argv[i]);
-                return EOS;
-            }
-            unsigned long npartition = countPartition();
-		}
-        return EOS; // computation completed
+
+		//ora provare a fare gli split dei file e inviarli ai workers
+        
+        return EOS;
+
     }
-    
-    void svc_end() {
+	private:
+		std::vector<FileData> group;
+		bool compr;
+};
+
+
+struct R_Worker : ff_minode_t<Task> {
+    R_Worker(size_t Lw) : Lw(Lw) {}
+
+    Task *svc(Task *in) {
+        
+        std::cout << "R_Worker, current worker: " << get_my_id() << " Filename: " << in->filename << std::endl;
+
+		bool oneblockfile = (in->nblocks == 1);
+		if (comp) {
+			unsigned char * inPtr = in->ptr;	
+			size_t          inSize= in->size;
+			
+			// get an estimation of the maximum compression size
+			unsigned long cmp_len = compressBound(inSize);
+			// allocate memory to store compressed data in memory
+			unsigned char *ptrOut = new unsigned char[cmp_len];
+			if (compress(ptrOut, &cmp_len, (const unsigned char *)inPtr, inSize) != Z_OK) {
+				if (QUITE_MODE>=1) std::fprintf(stderr, "Failed to compress file in memory\n");
+				success = false;
+				delete [] ptrOut;
+				delete in;
+				return GO_ON;
+			}
+			in->ptrOut   = ptrOut;
+			in->cmp_size = cmp_len;
+        	
+			if (oneblockfile) {
+				std::string outfile{in->filename};
+				outfile += SUFFIX;
+				bool s = writeFile(outfile, in->ptrOut, in->cmp_size);
+				if (s && REMOVE_ORIGIN && oneblockfile) {
+					unlink(in->filename.c_str());
+				}
+				unmapFile(in->ptr, in->size);	
+				delete [] in->ptrOut;
+				delete in;
+				return GO_ON;
+			} else {
+				std::cout << "file too big needs splitting" << std::endl;
+			}
+		}
+	}
+	void svc_end() {
 		if (!success) {
-			if (QUITE_MODE>=1) 
-				std::fprintf(stderr, "Read stage: Exiting with (some) Error(s)\n");		
+			if (QUITE_MODE>=1) std::fprintf(stderr, "Worker %ld: Exiting with (some) Error(s)\n", get_my_id());
 			return;
 		}
     }
-    // ------------------------------------
-    const char **argv;
-    const int    argc;
-    bool success = true;
+    
+	bool success = true;
+
+	const size_t Lw;
 };
 
-    Task *svc(Task *) {
-
-	const int nw = 	get_num_outchannels(); // gets the total number of workers added to the farm
-
-
-
-
-	const size_t  size = (n2 - n1) / nw; // partition size
-		ssize_t more = (n2-n1) % nw;
-		ull start = n1, stop = n1;
-	
-		for(int i=0; i<nw; ++i) {
-			start = stop;
-			stop  = start + size + (more>0 ? 1:0);
-			--more;
-	    
-			Task_t *task = new Task_t(start, stop);
-			ff_send_out_to(task, i);
-		}
-		return EOS;
-    }
-    ull n1,n2; 
-};
-struct R_Worker: ff_minode_t<Task_t> { // must be multi-input
-    R_Worker(const size_t Lw):Lw(Lw) {}
-    Task_t *svc(Task_t *in) {
-		ull   n1 = in->n1, n2 = in->n2;
-		ull  prime;
-		while( (prime=n1++) < n2 )  if (is_prime(prime)) results.push_back(prime);
-        return GO_ON;
-    }
-    std::vector<ull> results;
-    const size_t Lw;
-};
-*/  
 
 int main(int argc, char *argv[]) {    
     if (argc < 2) {
@@ -257,7 +164,7 @@ int main(int argc, char *argv[]) {
     if (start<0) return -1;
 
     //check if the path is a directory or a file and get infos
-    struct stat statbuf;
+    /*struct stat statbuf;
     
     if (stat(argv[start], &statbuf)==-1) {
         perror("stat");
@@ -281,7 +188,7 @@ int main(int argc, char *argv[]) {
             return -1;
         }
         std::cout << argv[start] << " is a file" <<" of size: " <<statbuf.st_size/1024<<"kb"<<std::endl;
-    }
+    }*/
 
 	std::vector<FileData> fileDataVec;
     
@@ -298,64 +205,71 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	// ora che ho i files provare a implementare a2a solo per stampare a qualche thread è associato quale file
- 
+	//get the lenght of fileDataVec
+
+	//const int nfiles = fileDataVec.size();
 
 
-    /*
-    bool print_primes = false;
-    if (argc >= 6)  print_primes = (std::string(argv[5]) == "on");
-	
-    ffTime(START_TIME);
-	
-    const size_t  size  = (n2 - n1) / Lw;
-    ssize_t       more  = (n2-n1) % Lw;
-    ull           start = n1;
-	  ull           stop  = n1;
+	const size_t Lw = lworkers;
+    const size_t Rw = rworkers;
+	bool compr = comp;
 
+	std::vector<std::vector<FileData>> groups = distributeFiles(fileDataVec, Lw);
+
+    // Output the groups
+	if (VERBOSE) {
+		for (int i = 0; i < Lw; ++i) {
+			std::cout << "Group " << i + 1 << ":\n";
+			for (const auto& file : groups[i]) {
+				std::cout << "  " << file.filename << " (Size: " << file.size << ")\n";
+			}
+			std::cout << std::endl;
+		}
+	}
+
+	// -----------------------------------------------
+	// FastFlow part
+
+	if(VERBOSE){
+		if (compr)
+			std::cout << "Current task: Compression\n";
+		else
+			std::cout << "Current task: Decompression\n";
+	}
+	ffTime(START_TIME);
+
+	std::cout << "creo gli array di workers" << std::endl;
     std::vector<ff_node*> LW;
     std::vector<ff_node*> RW;
-    for(size_t i=0; i<Lw; ++i) {
-		start = stop;
-		stop  = start + size + (more>0 ? 1:0);
-		--more;
-		LW.push_back(new L_Worker(start, stop));
+
+	std::cout << "creo i left workers" << std::endl;
+	for(size_t i=0; i<Lw; ++i) {
+		LW.push_back(new L_Worker(groups[i],compr));
     }
-    for(size_t i=0;i<Rw;++i)
+
+	std::cout << "creo i right workers" << std::endl;
+	for(size_t i=0;i<Rw;++i)
 		RW.push_back(new R_Worker(Lw));
-	
-    ff_a2a a2a;
-    a2a.add_firstset(LW, 1); //, 1 , true);
+
+	std::cout << "creo ff a2a" << std::endl;
+	ff_a2a a2a;
+    a2a.add_firstset(LW, 0); //, 1 , true);
     a2a.add_secondset(RW); //, true);
     
-    if (a2a.run_and_wait_end()<0) {
+	std::cout << "runno e waito" << std::endl;
+	if (a2a.run_and_wait_end()<0) {
 		error("running a2a\n");
 		return -1;
     }
-	
-    std::vector<ull> results;
-    results.reserve( (size_t)(n2-n1)/log(n1) );
-    for(size_t i=0;i<Rw;++i) {
-		R_Worker* r = reinterpret_cast<R_Worker*>(RW[i]);
-		if (r->results.size())  
-            results.insert(std::upper_bound(results.begin(), results.end(), r->results[0]),
-						   r->results.begin(), r->results.end());
-    }
-	if (Lw>1) // results must be sorted
-		std::sort(results.begin(), results.end());
+
 	ffTime(STOP_TIME);
-    
-    // printing obtained results
-    const size_t n = results.size();
-    std::cout << "Found " << n << " primes\n";
-    if (print_primes) {
-		for(size_t i=0;i<n;++i) 
-			std::cout << results[i] << " ";
-		std::cout << "\n\n";
-    }
-    std::cout << "Time: " << ffTime(GET_TIME) << " (ms)\n";
-    std::cout << "A2A Time: " << a2a.ffTime() << " (ms)\n";
-	*/
+
+	// -----------------------------------------------
+	
+	// cleanup
+
+
+
 	for (auto& fileData : fileDataVec) {
 		if(fileData.ptr != nullptr)
 			unmapFile(fileData.ptr, fileData.size);
