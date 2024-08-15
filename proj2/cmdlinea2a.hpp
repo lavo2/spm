@@ -53,7 +53,7 @@ int parseCommandLine(int argc, char *argv[]) {
     const std::string optstr="l:w:t:r:C:D:q:a:b:v:";
     
     lworkers = 2;
-	rworkers = ff_numCores()-2;
+	rworkers = ff_numCores()-2-1;
     long opt, aN = 1, start = 1;
     bool cpresent=false, dpresent=false;
     while((opt = getopt(argc, argv, optstr.c_str())) != -1) {

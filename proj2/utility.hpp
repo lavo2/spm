@@ -510,6 +510,14 @@ static inline bool countFiles(const char dname[], unsigned long long &nfiles, un
 }
 
 
+struct Partition {
+	unsigned long npart;
+	unsigned char* ptr;
+	size_t size_part;
+};
+
+
+
 struct FileData {
     unsigned char* ptr;
     std::string filename;
@@ -520,7 +528,9 @@ struct FileData {
         : ptr(p), filename(fname), size(s) {}
 };
 
-static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& fileDataVec) {
+
+
+static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& fileDataVec, const bool comp) {
     if (chdir(dname) == -1) {
         if (QUITE_MODE >= 1) {
             perror("chdir");
@@ -549,7 +559,7 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
         }
         if (S_ISDIR(statbuf.st_mode)) {
             if (!isdot(file->d_name)) {
-                if (walkDirAndGetPtr(file->d_name, fileDataVec)) {
+                if (walkDirAndGetPtr(file->d_name, fileDataVec, comp)) {
                     if (chdir("..") == -1) {
                         perror("chdir");
                         std::fprintf(stderr, "Error: chdir ..\n");
@@ -561,24 +571,40 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
                 }
             }
         } else {
+            std::string filename = file->d_name;
             size_t size = statbuf.st_size;
-            //std::fprintf(stderr, "File: %s\n", file->d_name);
+
+            // Check the file extension
+            bool isZipFile = (filename.size() > 4 && filename.substr(filename.size() - 4) == ".zip");
+
+            // Skip or include based on the 'comp' flag
+            if ((comp && isZipFile) || (!comp && !isZipFile)) {
+				if (comp) {
+					std::fprintf(stderr,"ignoring compressed file %s\n", file->d_name);
+				} else {
+					std::fprintf(stderr,"ignoring non-compressed file %s\n", file->d_name);
+				}
+                continue; // Skip if the conditions do not match
+            }
+
             unsigned char* ptr = nullptr;
             if (!mapFile(file->d_name, size, ptr)) return false;
 
             // Create a FileData object and store it in the vector
             fileDataVec.emplace_back(ptr, file->d_name, size);
         }
-    }
-    
-    if (errno != 0) {
-        if (QUITE_MODE >= 1) perror("readdir");
-        error = true;
-    }
+	}
+		
+	if (errno != 0) {
+		if (QUITE_MODE >= 1) perror("readdir");
+		error = true;
+	}
 
-    closedir(dir);
-    return !error;
+	closedir(dir);
+	return !error;
 }
+
+
 
 bool compareBySize(const FileData& a, const FileData& b) {
     return a.size > b.size;

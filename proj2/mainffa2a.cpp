@@ -23,6 +23,7 @@
 
 #include <ff/ff.hpp>
 #include <ff/all2all.hpp>
+#include <ff/pipeline.hpp>
 using namespace ff;
 
 
@@ -104,53 +105,120 @@ struct R_Worker : ff_minode_t<Task> {
 
     Task *svc(Task *in) {
         
-        std::cout << "R_Worker, current worker: " << get_my_id() << " Filename: " << in->filename << std::endl;
+       // std::cout << "R_Worker, current worker: " << get_my_id() << " Filename: " << in->filename << std::endl;
 
-		bool oneblockfile = (in->nblocks == 1);
 		if (comp) {
 			unsigned char * inPtr = in->ptr;	
 			size_t          inSize= in->size;
-			
 			// get an estimation of the maximum compression size
 			unsigned long cmp_len = compressBound(inSize);
 			// allocate memory to store compressed data in memory
 			unsigned char *ptrOut = new unsigned char[cmp_len];
 			if (compress(ptrOut, &cmp_len, (const unsigned char *)inPtr, inSize) != Z_OK) {
 				if (QUITE_MODE>=1) std::fprintf(stderr, "Failed to compress file in memory\n");
-				success = false;
+				//success = false;
 				delete [] ptrOut;
 				delete in;
 				return GO_ON;
 			}
 			in->ptrOut   = ptrOut;
 			in->cmp_size = cmp_len;
-        	
-			if (oneblockfile) {
-				std::string outfile{in->filename};
-				outfile += SUFFIX;
-				bool s = writeFile(outfile, in->ptrOut, in->cmp_size);
-				if (s && REMOVE_ORIGIN && oneblockfile) {
-					unlink(in->filename.c_str());
-				}
-				unmapFile(in->ptr, in->size);	
-				delete [] in->ptrOut;
-				delete in;
-				return GO_ON;
-			} else {
-				std::cout << "file too big needs splitting" << std::endl;
-			}
+			ff_send_out(in);
+			return GO_ON;
+
 		}
+		return GO_ON;
 	}
-	void svc_end() {
+	/*void svc_end() {
 		if (!success) {
 			if (QUITE_MODE>=1) std::fprintf(stderr, "Worker %ld: Exiting with (some) Error(s)\n", get_my_id());
 			return;
 		}
-    }
+    }*/
     
-	bool success = true;
-
+	//bool success = true;
 	const size_t Lw;
+};
+
+struct Merger : ff_minode_t<Task> {
+    Merger(size_t Rw) : Rw(Rw) {
+        (void)Rw;  // This will mark the variable as "used"
+    }
+
+    Task* svc(Task* in) override {
+        //std::cout << "Merger, current worker: " << get_my_id() << " Filename: " << in->filename 
+                  //<< " Block: " << in->blockid << std::endl;
+
+        try {
+            bool oneblockfile = (in->nblocks == 1);
+            if (oneblockfile) {
+                handleSingleBlock(in);
+            } else {
+                handleMultiBlock(in);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Exception in Merger::svc: " << e.what() << std::endl;
+            delete in;
+        }
+        return GO_ON;
+    }
+
+private:
+    struct FileMerger {
+        std::vector<Partition> partitions;
+    };
+
+    std::unordered_map<std::string, FileMerger> fileMergers; // Keyed by filename
+
+    void handleSingleBlock(Task* in) {
+        std::string outfile = in->filename + SUFFIX;
+        bool success = writeFile(outfile, in->ptrOut, in->cmp_size);
+        if (success && REMOVE_ORIGIN) {
+            unlink(in->filename.c_str());
+        }
+        cleanupTask(in);
+    }
+
+    void handleMultiBlock(Task* in) {
+        auto& fileMerger = fileMergers[in->filename];
+        fileMerger.partitions.push_back({in->blockid, in->ptrOut, in->cmp_size});
+        if (fileMerger.partitions.size() == in->nblocks) {
+			if (VERBOSE) {
+            	std::cout << "Merger initialized with " << Rw << " R_Workers" << std::endl;
+        	}
+            std::string outfile = in->filename + SUFFIX;
+            regroupAndZip(outfile, fileMerger);
+            fileMergers.erase(in->filename); // Remove the completed file from map
+        }
+        delete in; // Cleanup task
+    }
+
+    void regroupAndZip(const std::string &outputFilename, FileMerger& fileMerger) {
+        std::ofstream outFile(outputFilename, std::ios::binary);
+        if (!outFile.is_open()) {
+            std::cerr << "Failed to open output file: " << outputFilename << std::endl;
+            return;
+        }
+
+        std::sort(fileMerger.partitions.begin(), fileMerger.partitions.end(),
+                  [](const Partition& a, const Partition& b) {
+                      return a.npart < b.npart;
+                  });
+
+        for (const auto& part : fileMerger.partitions) {
+            outFile.write(reinterpret_cast<const char*>(part.ptr), part.size_part);
+            delete[] part.ptr;  // Clean up memory after use
+        }
+
+        outFile.close();
+    }
+
+    void cleanupTask(Task* in) {
+        unmapFile(in->ptr, in->size);  
+        delete[] in->ptrOut;
+        delete in;
+    }
+	const size_t Rw;
 };
 
 
@@ -163,36 +231,11 @@ int main(int argc, char *argv[]) {
     long start=parseCommandLine(argc, argv);
     if (start<0) return -1;
 
-    //check if the path is a directory or a file and get infos
-    /*struct stat statbuf;
-    
-    if (stat(argv[start], &statbuf)==-1) {
-        perror("stat");
-        std::fprintf(stderr, "Error: stat %s\n", argv[start]);
-        return -1;
-    }
-    if (S_ISDIR(statbuf.st_mode)) {
-        std::cout << argv[start] << " is a directory" << std::endl;
-		unsigned long long nfiles = 0; 
-		unsigned long long dirsize = 0;
-		if (countFiles(argv[start], nfiles, dirsize) == 0) {
-            std::fprintf(stderr, "Error: %s is empty\n", argv[start]);
-            return -1;
-        }
-		std::cout << "Number of files: " << nfiles << std::endl;
-		std::cout << "Directory size in kb: " << dirsize/1024 << std::endl;
-
-    } else {
-        if (statbuf.st_size==0) {
-            std::fprintf(stderr, "Error: %s has size 0\n", argv[start]);
-            return -1;
-        }
-        std::cout << argv[start] << " is a file" <<" of size: " <<statbuf.st_size/1024<<"kb"<<std::endl;
-    }*/
+	ffTime(START_TIME);
 
 	std::vector<FileData> fileDataVec;
     
-    if (!walkDirAndGetPtr(argv[start], fileDataVec)) {
+    if (!walkDirAndGetPtr(argv[start], fileDataVec, comp)) {
         std::cerr << "Failed to walk directory" << std::endl;
     }
 
@@ -208,7 +251,7 @@ int main(int argc, char *argv[]) {
 	//get the lenght of fileDataVec
 
 	//const int nfiles = fileDataVec.size();
-
+	
 
 	const size_t Lw = lworkers;
     const size_t Rw = rworkers;
@@ -236,7 +279,8 @@ int main(int argc, char *argv[]) {
 		else
 			std::cout << "Current task: Decompression\n";
 	}
-	ffTime(START_TIME);
+	
+
 
 	std::cout << "creo gli array di workers" << std::endl;
     std::vector<ff_node*> LW;
@@ -251,18 +295,26 @@ int main(int argc, char *argv[]) {
 	for(size_t i=0;i<Rw;++i)
 		RW.push_back(new R_Worker(Lw));
 
+
+	Merger merger(Rw);
+
 	std::cout << "creo ff a2a" << std::endl;
 	ff_a2a a2a;
     a2a.add_firstset(LW, 0); //, 1 , true);
     a2a.add_secondset(RW); //, true);
+
+	std::cout << "creo la pipa" << std::endl;
+	ff_Pipe<> pipe(a2a, merger);
     
 	std::cout << "runno e waito" << std::endl;
-	if (a2a.run_and_wait_end()<0) {
+	if (pipe.run_and_wait_end()<0) {
 		error("running a2a\n");
 		return -1;
     }
 
 	ffTime(STOP_TIME);
+	std::cout << "Time: " << ffTime(GET_TIME) << " (ms)\n";
+    std::cout << "A2A Time: " << pipe.ffTime() << " (ms)\n";
 
 	// -----------------------------------------------
 	
