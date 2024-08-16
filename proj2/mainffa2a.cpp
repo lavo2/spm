@@ -84,19 +84,30 @@ struct L_Worker : ff::ff_monode_t<Task> {
 		}
 
 		// Read the header to determine if it's a single block or multi-block file
-		uint8_t header;
+		uint32_t header;
 		inFile.read(reinterpret_cast<char*>(&header), sizeof(header));
-		inFile.close();
 
 		if (header == 0) {
 			// Single block file
 			ff_send_out(new Task(ptr, size, fname));
 		} else {
 			// Multi-block file
+			uint32_t numBlocks = header;
+
+			// Read the sizes of each block
+			std::vector<u_int32_t> blockSizes(numBlocks);
+			for (size_t i = 0; i < numBlocks; ++i) {
+				uint32_t blockSize;
+				inFile.read(reinterpret_cast<char*>(&blockSize), sizeof(blockSize));
+				blockSizes[i] = blockSize;
+				//std::cout << "Block " << i << " size: " << blockSize << std::endl;
+			}
+
 			Task *t = new Task(ptr, size, fname);
 			t->isSingleBlock=false;
 			std::cout << "Decompressing multi-block file: " << fname <<"... Devo pensare come"<< std::endl;
 		}
+		inFile.close();
 		return true;
 	}
 
@@ -161,7 +172,13 @@ struct R_Worker : ff_minode_t<Task> {
 			in->cmp_size = cmp_len;
 			bool oneblockfile = (in->nblocks == 1);
             if (oneblockfile) {
-                handleSingleBlock(in);
+				if(VERBOSE) std::cout << "Compressing single block file: " << in->filename << std::endl;
+                if(!handleSingleBlock(in)){
+					std::cerr << "Failed to compress single block file: " << in->filename << std::endl;
+					delete in;
+					return GO_ON;
+				}
+
 			} else {
 				ff_send_out(in);
 			}
@@ -170,8 +187,10 @@ struct R_Worker : ff_minode_t<Task> {
 		}
 		else{
 			if (in->isSingleBlock) {
+				if(VERBOSE) std::cout << "Decompressing single block file: " << in->filename << std::endl;
 				// Decompress a single block file
-				if (!decompressSingleBlock(in->filename)) {
+				if (!decompressSingleBlock(in)) {
+					std::cerr << "Failed to decompress single block file: " << in->filename << std::endl;
 					delete in;
 					return GO_ON;
 				}
@@ -179,25 +198,25 @@ struct R_Worker : ff_minode_t<Task> {
 				// Decompress a multi-block file
 				//if (!decompressMultiBlock(in)) {
 					delete in;
-					return GO_ON;
 				}
+				return GO_ON;
 			}
 			return GO_ON;
 		}
 
-	bool decompressSingleBlock(const std::string& inputFile) {
-		std::ifstream inFile(inputFile, std::ios::binary);
+	bool decompressSingleBlock(Task* in) {
+		std::ifstream inFile(in->filename, std::ios::binary);
 		if (!inFile.is_open()) {
-			std::cerr << "Failed to open input file: " << inputFile << std::endl;
+			std::cerr << "Failed to open input file: " << in->filename << std::endl;
 			return false;
 		}
 
 		// Read the entire file into memory
 		inFile.seekg(0, std::ios::end);
 		size_t fileSize = inFile.tellg();
-		inFile.seekg(1, std::ios::beg);  // Skip the header byte
+		inFile.seekg(4, std::ios::beg);  // Skip the header byte
 
-		size_t compressedSize = fileSize - 1;  // Exclude the header byte
+		size_t compressedSize = fileSize - 4;  // Exclude the header byte
 		std::vector<unsigned char> compressedData(compressedSize);
 		inFile.read(reinterpret_cast<char*>(compressedData.data()), compressedSize);
 		inFile.close();
@@ -213,7 +232,7 @@ struct R_Worker : ff_minode_t<Task> {
 
 		// Write decompressed data to output file
 		// Remove the ".zip" suffix
-		std::string outputFile = inputFile.substr(0, inputFile.size() - 4);
+		std::string outputFile = in->filename.substr(0, in->filename.size() - 4);
 		std::ofstream outFile(outputFile, std::ios::binary);
 		if (!outFile.is_open()) {
 			std::cerr << "Failed to open output file: " << outputFile << std::endl;
@@ -221,6 +240,10 @@ struct R_Worker : ff_minode_t<Task> {
 		}
 
 		outFile.write(reinterpret_cast<char*>(uncompressedData.data()), uncompressedSize);
+		if (REMOVE_ORIGIN) {
+            	unlink(in->filename.c_str());
+        }
+		cleanupTask(in);
 		outFile.close();
 
 		return true;
@@ -235,26 +258,29 @@ struct R_Worker : ff_minode_t<Task> {
 	}
 
 
-	void handleSingleBlock(Task* in) {
+	bool handleSingleBlock(Task* in) {
         std::string outfile = in->filename + SUFFIX;
         std::ofstream outFile(outfile, std::ios::binary);
         if (!outFile.is_open()) {
             std::cerr << "Failed to open output file: " << outfile << std::endl;
-            return;
+            return false;
         }
 
         // Write a header indicating it's a single block file
-        uint8_t header = 0; // 0 indicates a single block
+        uint32_t header = 0; // 0 indicates a single block
         outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
 
         // Write the compressed data
         outFile.write(reinterpret_cast<const char*>(in->ptrOut), in->cmp_size);
+		
 
         if (REMOVE_ORIGIN) {
             unlink(in->filename.c_str());
         }
 
         cleanupTask(in);
+		outFile.close();
+		return true;
     }
 
 	void cleanupTask(Task* in) {
@@ -282,17 +308,12 @@ struct Merger : ff_minode_t<Task> {
         //std::cout << "Merger, current worker: " << get_my_id() << " Filename: " << in->filename 
                   //<< " Block: " << in->blockid << std::endl;
 
-        try {
-            bool oneblockfile = (in->nblocks == 1);
-            if (oneblockfile) {
-                handleSingleBlock(in);
-            } else {
-                handleMultiBlock(in);
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "Exception in Merger::svc: " << e.what() << std::endl;
-            delete in;
-        }
+        if(comp)
+        	handleMultiBlock(in);
+		else
+			std::cout << "Decompression not implemented yet" << std::endl;
+        
+        
         return GO_ON;
     }
 
@@ -311,28 +332,6 @@ private:
         }
         cleanupTask(in);
     }*/
-
-	void handleSingleBlock(Task* in) {
-        std::string outfile = in->filename + SUFFIX;
-        std::ofstream outFile(outfile, std::ios::binary);
-        if (!outFile.is_open()) {
-            std::cerr << "Failed to open output file: " << outfile << std::endl;
-            return;
-        }
-
-        // Write a header indicating it's a single block file
-        uint8_t header = 0; // 0 indicates a single block
-        outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
-
-        // Write the compressed data
-        outFile.write(reinterpret_cast<const char*>(in->ptrOut), in->cmp_size);
-
-        if (REMOVE_ORIGIN) {
-            unlink(in->filename.c_str());
-        }
-
-        cleanupTask(in);
-    }
 
     void handleMultiBlock(Task* in) {
         auto& fileMerger = fileMergers[in->filename];
@@ -376,13 +375,14 @@ private:
         }
 
         // Write a header indicating it's a multi-block file
-        uint8_t header = fileMerger.partitions.size(); // Number of blocks
+     	uint32_t header = static_cast<uint32_t>(fileMerger.partitions.size()); // Number of blocks
         outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
 
-        // Write the size of each block
-        for (const auto& part : fileMerger.partitions) {
-            outFile.write(reinterpret_cast<const char*>(&part.size_part), sizeof(size_t));
-        }
+    	for (const auto& part : fileMerger.partitions) {
+        	uint32_t partSize = static_cast<uint32_t>(part.size_part);
+			//std::cout<<"partSize: "<<partSize<<std::endl;
+        	outFile.write(reinterpret_cast<const char*>(&partSize), sizeof(partSize));
+    	}
 
         // Write the actual data
         std::sort(fileMerger.partitions.begin(), fileMerger.partitions.end(),
