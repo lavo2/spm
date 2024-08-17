@@ -72,7 +72,7 @@ struct L_Worker : ff::ff_monode_t<Task> {
 				t->blockid=fullblocks+1;
 				t->nblocks=fullblocks+1;
 				t->isSingleBlock=false;
-				std::cout << "Partial block: " << partialblock << std::endl;
+				//std::cout << "Partial block: " << partialblock << std::endl;
 				ff_send_out(t); // sending to the next stage
 			}
 		}
@@ -85,7 +85,7 @@ struct L_Worker : ff::ff_monode_t<Task> {
 		size_t header;
 		memcpy(&header, ptr, sizeof(header));
 		
-		std::cout << "Header: " << header << std::endl;
+		//std::cout << "Header: " << header << std::endl;
 		if (header == 0) {
 			// Single block file
 			ff_send_out(new Task(ptr, size, fname));
@@ -103,7 +103,7 @@ struct L_Worker : ff::ff_monode_t<Task> {
 				memcpy(&blockSize, ptr + sizeof(header) + i * sizeof(blockSize), sizeof(blockSize));
 				blockSizes[i] = blockSize;
 
-				std::cout << "Block " << i << " size: " << blockSize << std::endl;
+				//std::cout << "Block " << i << " size: " << blockSize << std::endl;
 			}
 
 			size_t lastBlock;
@@ -185,7 +185,6 @@ struct R_Worker : ff_minode_t<Task> {
 			size_t          inSize= in->size;
 			// get an estimation of the maximum compression size
 			size_t cmp_len = compressBound(inSize);
-			std::cout << "Compression size bound: " << cmp_len << std::endl;
 			// allocate memory to store compressed data in memory
 			unsigned char *ptrOut = new unsigned char[cmp_len];
 			if (compress(ptrOut, &cmp_len, (const unsigned char *)inPtr, inSize) != Z_OK) {
@@ -195,7 +194,6 @@ struct R_Worker : ff_minode_t<Task> {
 				delete in;
 				return GO_ON;
 			}
-			std::cout << "Compression size after compression: " << cmp_len << std::endl;
 
 
 			in->ptrOut   = ptrOut;
@@ -235,6 +233,7 @@ struct R_Worker : ff_minode_t<Task> {
 				}
         		unsigned char *ptrOut = new unsigned char[decmp_len];
 				if (!decompressBlock(in->ptr, in->size, ptrOut, decmp_len)) {
+					std::cerr << "Failed to decompress block: " << in->blockid << " of file: " << in->filename << std::endl;
 					delete[] ptrOut;
 					delete in;
 					return GO_ON;
@@ -274,6 +273,7 @@ struct R_Worker : ff_minode_t<Task> {
 
 		// Decompress
 		if (!decompressBlock(compressedData.data(), compressedSize, uncompressedData.data(), uncompressedSize)) {
+			std::cerr << "Failed to decompress single block file: " << in->filename << std::endl;
 			return false;
 		}
 
@@ -297,8 +297,9 @@ struct R_Worker : ff_minode_t<Task> {
 	}
 
 	bool decompressBlock(unsigned char* input, size_t inputSize, unsigned char* output, size_t& outputSize) {
-		if (uncompress(output, &outputSize, input, inputSize) != Z_OK) {
-			std::cerr << "Failed to decompress block" << std::endl;
+		int err;
+		if ((err = uncompress(output, &outputSize, input, inputSize)) != Z_OK) {
+			std::cerr << "Failed to decompress block, error: " << err << std::endl;
 			return false;
 		}
 		return true;
@@ -357,7 +358,10 @@ struct Merger : ff_minode_t<Task> {
 
 
 		handleMultiBlock(in);
-        
+		// print to use the variable or it gives a warning
+		if (in->filename == "_warning_") {
+			std::cerr << "Error in Merger, R-workers: " << Rw << std::endl;
+		}
         return GO_ON;
     }
 
@@ -374,9 +378,7 @@ private:
 		// note for decompression the in->cmp_size is the maximum size of the block BIGFILE_LOW_THRESHOLD
         fileMerger.partitions.push_back({in->blockid, in->ptrOut, in->cmp_size, in->size});
         if (fileMerger.partitions.size() == in->nblocks) {
-			if (VERBOSE) {
-            	std::cout << "Merger initialized with " << Rw << " R_Workers" << std::endl;
-        	}
+			if (VERBOSE) std::cout << "Merging file: " << in->filename << std::endl;
             if(comp){
 				std::string outfile = in->filename + SUFFIX;
 				regroupAndZip(outfile, fileMerger);
@@ -385,7 +387,10 @@ private:
 				std::string outfile = in->filename.substr(0, in->filename.size() - 4);
 				regroupAndWrite(outfile, fileMerger);
 
-			}            
+			}
+			if (REMOVE_ORIGIN) {
+           		unlink(in->filename.c_str());
+        	}            
 			fileMergers.erase(in->filename); // Remove the completed file from map
         }
         delete in; // Cleanup task
@@ -408,12 +413,11 @@ private:
 			delete[] part.ptr;  // Clean up memory after use
 		}
 		outFile.close();
-		if (REMOVE_ORIGIN) {
-			unlink(outputFilename.c_str());
-		}
 	}
 
 	void regroupAndZip(const std::string &outputFilename, FileMerger& fileMerger) {
+		//print the output file
+		//std::cout << "Output file: " << outputFilename << std::endl;
         std::ofstream outFile(outputFilename, std::ios::binary);
         if (!outFile.is_open()) {
             std::cerr << "Failed to open output file: " << outputFilename << std::endl;
@@ -444,9 +448,6 @@ private:
             delete[] part.ptr;  // Clean up memory after use
         }
         outFile.close();
-		if (REMOVE_ORIGIN) {
-			unlink(outputFilename.c_str());
-		}
     }
 
     void cleanupTask(Task* in) {

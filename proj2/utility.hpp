@@ -531,9 +531,9 @@ struct FileData {
 
 
 
-static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& fileDataVec, const bool comp) {
+static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& fileDataVec, const bool comp, std::string relativePath = "") {
     struct stat statbuf;
-    
+
     if (stat(dname, &statbuf) == -1) {
         if (QUITE_MODE >= 1) {
             perror("stat");
@@ -541,7 +541,7 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
         }
         return false;
     }
-    
+
     if (S_ISDIR(statbuf.st_mode)) {
         // Process as a directory
         if (chdir(dname) == -1) {
@@ -551,7 +551,7 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
             }
             return false;
         }
-        
+
         DIR *dir;
         if ((dir = opendir(".")) == NULL) {
             if (QUITE_MODE >= 1) {
@@ -560,7 +560,7 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
             }
             return false;
         }
-        
+
         struct dirent *file;
         bool error = false;
         while ((errno = 0, file = readdir(dir)) != NULL) {
@@ -571,10 +571,12 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
                 }
                 return false;
             }
-            
+
             if (S_ISDIR(statbuf.st_mode)) {
                 if (!isdot(file->d_name)) {
-                    if (walkDirAndGetPtr(file->d_name, fileDataVec, comp)) {
+                    // Update relative path for the directory
+                    std::string newRelativePath = relativePath + file->d_name + "/";
+                    if (walkDirAndGetPtr(file->d_name, fileDataVec, comp, newRelativePath)) {
                         if (chdir("..") == -1) {
                             perror("chdir");
                             std::fprintf(stderr, "Error: chdir ..\n");
@@ -587,7 +589,7 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
             } else {
                 std::string filename = file->d_name;
                 size_t size = statbuf.st_size;
-                
+
                 // Check the file extension
                 bool isZipFile = (filename.size() > 4 && filename.substr(filename.size() - 4) == ".zip");
 
@@ -596,28 +598,28 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
                     std::fprintf(stderr, "ignoring %s file %s\n", comp ? "compressed" : "non-compressed", file->d_name);
                     continue; // Skip if the conditions do not match
                 }
-                
+
                 unsigned char* ptr = nullptr;
                 if (!mapFile(file->d_name, size, ptr)) return false;
 
-                // Create a FileData object and store it in the vector
-                fileDataVec.emplace_back(ptr, file->d_name, size);
+                // Create a FileData object with the relative path and store it in the vector
+                fileDataVec.emplace_back(ptr, relativePath + file->d_name, size);
             }
         }
-        
+
         if (errno != 0) {
             if (QUITE_MODE >= 1) perror("readdir");
             error = true;
         }
-        
+
         closedir(dir);
         return !error;
-        
+
     } else {
         // Process as a single file
         std::string filename = dname;
         size_t size = statbuf.st_size;
-        
+
         // Check the file extension
         bool isZipFile = (filename.size() > 4 && filename.substr(filename.size() - 4) == ".zip");
 
@@ -626,16 +628,17 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
             std::fprintf(stderr, "ignoring %s file %s\n", comp ? "compressed" : "non-compressed", dname);
             return true; // Skip if the conditions do not match
         }
-        
+
         unsigned char* ptr = nullptr;
         if (!mapFile(dname, size, ptr)) return false;
 
-        // Create a FileData object and store it in the vector
-        fileDataVec.emplace_back(ptr, dname, size);
-        
+        // Create a FileData object with the relative path and store it in the vector
+        fileDataVec.emplace_back(ptr, relativePath + dname, size);
+
         return true;
     }
 }
+
 
 
 
