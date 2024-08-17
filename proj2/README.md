@@ -19,3 +19,7 @@ Options:
  -q 0 silent mode, 1 prints only error messages to stderr, 2 verbose (default q=1)
  -a asynchrony degree for the on-demand policy (default a=1)
  -b 0 blocking, 1 non-blocking concurrency control (default b=0)
+
+# TODO
+check origialn file pointer deallocation (if already done eliminate filePtr from task)
+fix the REMOVE ORIGIN for multiblock files

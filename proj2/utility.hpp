@@ -514,6 +514,7 @@ struct Partition {
 	unsigned long npart;
 	unsigned char* ptr;
 	size_t size_part;
+	size_t size_uncompressed;
 };
 
 
@@ -531,78 +532,111 @@ struct FileData {
 
 
 static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& fileDataVec, const bool comp) {
-    if (chdir(dname) == -1) {
+    struct stat statbuf;
+    
+    if (stat(dname, &statbuf) == -1) {
         if (QUITE_MODE >= 1) {
-            perror("chdir");
-            std::fprintf(stderr, "Error: chdir %s\n", dname);
+            perror("stat");
+            std::fprintf(stderr, "Error: stat %s\n", dname);
         }
         return false;
     }
-    DIR *dir;    
-    if ((dir = opendir(".")) == NULL) {
-        if (QUITE_MODE >= 1) {
-            perror("opendir");
-            std::fprintf(stderr, "Error: opendir %s\n", dname);
-        }
-        return false;
-    }
-    struct dirent *file;
-    bool error = false;
-    while ((errno = 0, file = readdir(dir)) != NULL) {
-        struct stat statbuf;
-        if (stat(file->d_name, &statbuf) == -1) {
-            if (QUITE_MODE >= 1) {        
-                perror("stat");
-                std::fprintf(stderr, "Error: stat %s\n", file->d_name);
+    
+    if (S_ISDIR(statbuf.st_mode)) {
+        // Process as a directory
+        if (chdir(dname) == -1) {
+            if (QUITE_MODE >= 1) {
+                perror("chdir");
+                std::fprintf(stderr, "Error: chdir %s\n", dname);
             }
             return false;
         }
-        if (S_ISDIR(statbuf.st_mode)) {
-            if (!isdot(file->d_name)) {
-                if (walkDirAndGetPtr(file->d_name, fileDataVec, comp)) {
-                    if (chdir("..") == -1) {
-                        perror("chdir");
-                        std::fprintf(stderr, "Error: chdir ..\n");
+        
+        DIR *dir;
+        if ((dir = opendir(".")) == NULL) {
+            if (QUITE_MODE >= 1) {
+                perror("opendir");
+                std::fprintf(stderr, "Error: opendir %s\n", dname);
+            }
+            return false;
+        }
+        
+        struct dirent *file;
+        bool error = false;
+        while ((errno = 0, file = readdir(dir)) != NULL) {
+            if (stat(file->d_name, &statbuf) == -1) {
+                if (QUITE_MODE >= 1) {
+                    perror("stat");
+                    std::fprintf(stderr, "Error: stat %s\n", file->d_name);
+                }
+                return false;
+            }
+            
+            if (S_ISDIR(statbuf.st_mode)) {
+                if (!isdot(file->d_name)) {
+                    if (walkDirAndGetPtr(file->d_name, fileDataVec, comp)) {
+                        if (chdir("..") == -1) {
+                            perror("chdir");
+                            std::fprintf(stderr, "Error: chdir ..\n");
+                            error = true;
+                        }
+                    } else {
                         error = true;
                     }
                 }
-                else {
-                    error = true;
+            } else {
+                std::string filename = file->d_name;
+                size_t size = statbuf.st_size;
+                
+                // Check the file extension
+                bool isZipFile = (filename.size() > 4 && filename.substr(filename.size() - 4) == ".zip");
+
+                // Skip or include based on the 'comp' flag
+                if ((comp && isZipFile) || (!comp && !isZipFile)) {
+                    std::fprintf(stderr, "ignoring %s file %s\n", comp ? "compressed" : "non-compressed", file->d_name);
+                    continue; // Skip if the conditions do not match
                 }
+                
+                unsigned char* ptr = nullptr;
+                if (!mapFile(file->d_name, size, ptr)) return false;
+
+                // Create a FileData object and store it in the vector
+                fileDataVec.emplace_back(ptr, file->d_name, size);
             }
-        } else {
-            std::string filename = file->d_name;
-            size_t size = statbuf.st_size;
-
-            // Check the file extension
-            bool isZipFile = (filename.size() > 4 && filename.substr(filename.size() - 4) == ".zip");
-
-            // Skip or include based on the 'comp' flag
-            if ((comp && isZipFile) || (!comp && !isZipFile)) {
-				if (comp) {
-					std::fprintf(stderr,"ignoring compressed file %s\n", file->d_name);
-				} else {
-					std::fprintf(stderr,"ignoring non-compressed file %s\n", file->d_name);
-				}
-                continue; // Skip if the conditions do not match
-            }
-
-            unsigned char* ptr = nullptr;
-            if (!mapFile(file->d_name, size, ptr)) return false;
-
-            // Create a FileData object and store it in the vector
-            fileDataVec.emplace_back(ptr, file->d_name, size);
         }
-	}
-		
-	if (errno != 0) {
-		if (QUITE_MODE >= 1) perror("readdir");
-		error = true;
-	}
+        
+        if (errno != 0) {
+            if (QUITE_MODE >= 1) perror("readdir");
+            error = true;
+        }
+        
+        closedir(dir);
+        return !error;
+        
+    } else {
+        // Process as a single file
+        std::string filename = dname;
+        size_t size = statbuf.st_size;
+        
+        // Check the file extension
+        bool isZipFile = (filename.size() > 4 && filename.substr(filename.size() - 4) == ".zip");
 
-	closedir(dir);
-	return !error;
+        // Skip or include based on the 'comp' flag
+        if ((comp && isZipFile) || (!comp && !isZipFile)) {
+            std::fprintf(stderr, "ignoring %s file %s\n", comp ? "compressed" : "non-compressed", dname);
+            return true; // Skip if the conditions do not match
+        }
+        
+        unsigned char* ptr = nullptr;
+        if (!mapFile(dname, size, ptr)) return false;
+
+        // Create a FileData object and store it in the vector
+        fileDataVec.emplace_back(ptr, dname, size);
+        
+        return true;
+    }
 }
+
 
 
 

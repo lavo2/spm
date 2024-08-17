@@ -42,9 +42,11 @@ struct Task {
     size_t            blockid=1;     // block identifier (for "BIG files")
     size_t            nblocks=1;     // #blocks in which a "BIG file" is split
 	size_t			  nfiles=1;      // #files in a directory
+	size_t            lastBlock=0;   // last block size
     const std::string filename;      // source file name
 	bool			  compress=true;  // compress or decompress
 	bool			  isSingleBlock=true; // single block file
+	unsigned char     *filePtr=nullptr; // original pointer
 };
 
 
@@ -70,6 +72,7 @@ struct L_Worker : ff::ff_monode_t<Task> {
 				t->blockid=fullblocks+1;
 				t->nblocks=fullblocks+1;
 				t->isSingleBlock=false;
+				std::cout << "Partial block: " << partialblock << std::endl;
 				ff_send_out(t); // sending to the next stage
 			}
 		}
@@ -86,6 +89,7 @@ struct L_Worker : ff::ff_monode_t<Task> {
 		if (header == 0) {
 			// Single block file
 			ff_send_out(new Task(ptr, size, fname));
+			return true;
 		} else {
 			// Multi-block file
 			size_t numBlocks = header;
@@ -101,7 +105,11 @@ struct L_Worker : ff::ff_monode_t<Task> {
 
 				std::cout << "Block " << i << " size: " << blockSize << std::endl;
 			}
-			size_t headerSize = sizeof(header) + numBlocks * sizeof(size_t);
+
+			size_t lastBlock;
+			memcpy(&lastBlock, ptr + sizeof(header) + numBlocks * sizeof(size_t), sizeof(lastBlock));
+
+			size_t headerSize = sizeof(header) + numBlocks * sizeof(size_t) + sizeof(lastBlock);
 
 			size_t currentPos = 0;
 			for (size_t i = 0; i < numBlocks; ++i) {
@@ -113,47 +121,20 @@ struct L_Worker : ff::ff_monode_t<Task> {
 				memcpy(blockDataPtr, ptr + headerSize + currentPos, blockSize);
 				currentPos += blockSize;
 				
-				
-
 
 				Task *t = new Task(blockDataPtr, blockSize, fname);
 				t->blockid = i + 1;
 				t->nblocks = numBlocks;
 				t->isSingleBlock = false;
-				ff_send_out(t);
-				}/*
-				std::cout << i << " block size: " << blockSize << std::endl;
-				size_t decmp_len = BIGFILE_LOW_THRESHOLD; // block upper bound
-				std::cout << decmp_len << std::endl;
-				unsigned char *ptrOut = new unsigned char[decmp_len];
-				int er = uncompress(ptrOut, &decmp_len, blockDataPtr, blockSize);
-
-				if (er != Z_OK) {
-					std::cerr << "Failed to decompress block " << i << std::endl;
-					std::cerr <<
-					" pointer out not null: " << (ptrOut != nullptr) <<
-					" error: " << er << " (" << zError(er) << ")" << std::endl;
-					delete[] ptrOut;
-					//delete t;
-					return GO_ON;
+				if (i == numBlocks - 1) {
+					t->size = lastBlock;
 				}
-				std::cout << "Decompressed block: " << i << " of file: " << std::endl;
-				delete[] ptrOut; // Make sure to free allocated memory
-				delete[] blockDataPtr; // Free block data after usage
+				ff_send_out(t);
 			}
-			*/
-			
-		
-
-			/* get the pointer of each memory block and decompress*/
-			
-			//Task *t = new Task(ptr, size, fname);
-			//t->isSingleBlock=false;
-			//std::cout << "Decompressing multi-block file: " << fname <<"... Devo pensare come"<< std::endl;
-		
-		//inFile.close();
-		return true;
-	}
+			return true;
+		}
+		std::cerr << "Error with the header during decompression" << std::endl;
+		return false;
 	}
 
      
@@ -220,7 +201,7 @@ struct R_Worker : ff_minode_t<Task> {
 			in->ptrOut   = ptrOut;
 			in->cmp_size = cmp_len;
 			bool oneblockfile = (in->nblocks == 1);
-            if (oneblockfile) {
+            if (oneblockfile) { // single block file compression are handled without the merger
 				if(VERBOSE) std::cout << "Compressing single block file: " << in->filename << std::endl;
                 if(!handleSingleBlock(in)){
 					std::cerr << "Failed to compress single block file: " << in->filename << std::endl;
@@ -247,17 +228,19 @@ struct R_Worker : ff_minode_t<Task> {
 			} else {
 				//std::cout << "Decompressing multi-block file: " << in->filename << std::endl;
 				
+				// If it is the last block, use the lastBlock size
 				unsigned long decmp_len = BIGFILE_LOW_THRESHOLD; // block upper bound
+				if (in->lastBlock){
+					decmp_len = in->lastBlock;
+				}
         		unsigned char *ptrOut = new unsigned char[decmp_len];
-				int er;
-				if ((er = uncompress(ptrOut, &decmp_len, in->ptr, in->size)) != Z_OK) {
-					std::cerr << "Failed to decompress block" << std::endl;
+				if (!decompressBlock(in->ptr, in->size, ptrOut, decmp_len)) {
 					delete[] ptrOut;
 					delete in;
 					return GO_ON;
 				}
-				std::cout << "Decompressed block: " << in->blockid << " of file: " << in->filename << std::endl;
-				in->cmp_size = BIGFILE_LOW_THRESHOLD;
+				//std::cout << "Decompressed block: " << in->blockid << " of file: " << in->filename << std::endl;
+				in->cmp_size = decmp_len;
 				in->ptrOut = ptrOut;
 				ff_send_out(in);
 			}
@@ -372,13 +355,8 @@ struct Merger : ff_minode_t<Task> {
         //std::cout << "Merger, current worker: " << get_my_id() << " Filename: " << in->filename 
                   //<< " Block: " << in->blockid << std::endl;
 
-        if(comp)
-        	handleMultiBlock(in);
-		else {
-			//std::cout << "Decompression not implemented yet" << std::endl;
-			std::cout<<"obtained block: "<<in->blockid<<" of file: "<<in->filename<<std::endl;
-			handleMultiBlock(in);
-		}
+
+		handleMultiBlock(in);
         
         return GO_ON;
     }
@@ -394,7 +372,7 @@ private:
     void handleMultiBlock(Task* in) {
         auto& fileMerger = fileMergers[in->filename];
 		// note for decompression the in->cmp_size is the maximum size of the block BIGFILE_LOW_THRESHOLD
-        fileMerger.partitions.push_back({in->blockid, in->ptrOut, in->cmp_size});
+        fileMerger.partitions.push_back({in->blockid, in->ptrOut, in->cmp_size, in->size});
         if (fileMerger.partitions.size() == in->nblocks) {
 			if (VERBOSE) {
             	std::cout << "Merger initialized with " << Rw << " R_Workers" << std::endl;
@@ -446,20 +424,21 @@ private:
      	size_t header = static_cast<size_t>(fileMerger.partitions.size()); // Number of blocks
         outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
 
-        // Write the actual data
+        // sort the blocks
         std::sort(fileMerger.partitions.begin(), fileMerger.partitions.end(),
                   [](const Partition& a, const Partition& b) {
                       return a.npart < b.npart;
                   });
 
-		int count = 1;
+		//write the blocks sizes in the header
     	for (const auto& part : fileMerger.partitions) {
-
         	size_t partSize = static_cast<size_t>(part.size_part);
-			std::cout<<"block << "<<count<<" size: "<<partSize<<std::endl;
-			count++;
         	outFile.write(reinterpret_cast<const char*>(&partSize), sizeof(partSize));
     	}
+
+		size_t lastBlock = static_cast<size_t>(fileMerger.partitions[fileMerger.partitions.size() - 1].size_uncompressed);
+		outFile.write(reinterpret_cast<const char*>(&lastBlock), sizeof(lastBlock));
+		// Write the compressed data of each block
         for (const auto& part : fileMerger.partitions) {
             outFile.write(reinterpret_cast<const char*>(part.ptr), part.size_part);
             delete[] part.ptr;  // Clean up memory after use
@@ -493,6 +472,7 @@ int main(int argc, char *argv[]) {
 
 	std::vector<FileData> fileDataVec;
     
+	
     if (!walkDirAndGetPtr(argv[start], fileDataVec, comp)) {
         std::cerr << "Failed to walk directory" << std::endl;
     }
@@ -505,11 +485,6 @@ int main(int argc, char *argv[]) {
 					<< std::endl;
 		}
 	}
-
-	//get the lenght of fileDataVec
-
-	//const int nfiles = fileDataVec.size();
-	
 
 	const size_t Lw = lworkers;
     const size_t Rw = rworkers;
