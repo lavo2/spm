@@ -1,46 +1,46 @@
-# FF_ROOT pointing to the FastFlow root directory (i.e.
-# the one containing the ff directory).
+# 
+# FF_ROOT     pointing to the FastFlow root directory (i.e.
+#             the one containing the ff directory).
 ifndef FF_ROOT
-FF_ROOT = /Users/lavo/Desktop/Projects/spm/fastflow
+FF_ROOT		= /Users/lavo/Desktop/Projects/spm/fastflow
 endif
 
-CXX = g++ -std=c++20
-INCLUDES = -I . -I miniz
-CXXFLAGS += -Wall -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
-LDFLAGS = -pthread
-OPTFLAGS = -O3 -ffast-math -DNDEBUG
+CXX		= g++ -std=c++20
+INCLUDES	= -I . -I miniz
+CXXFLAGS  	+= -Wall -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
 
-# Additional flags for Valgrind
-VALGRINDFLAGS = -g -O0
+LDFLAGS 	= -pthread
+OPTFLAGS	= -O3 -ffast-math -DNDEBUG
 
-TARGETS = compdecomp \
-          ffc_farm \
-          mainff \
-          mainffa2a \
-          mainseq
+TARGETS		= compdecomp \
+		  ffc_farm \
+		  mainff \
+		  mainffa2a \
+		  mainseq
 
-.PHONY: all clean cleanall mainffa2aleak
+.PHONY: all clean cleanall
 .SUFFIXES: .cpp 
+
 
 %: %.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
-all: $(TARGETS)
+all		: $(TARGETS)
 
-mainseq: mainseq.cpp utility.hpp
+mainseq	: mainseq.cpp utility.hpp
 	$(CXX) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c
 
-mainff: mainff.cpp utility.hpp cmdline.hpp
+mainff       : mainff.cpp utility.hpp cmdline.hpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
-mainffa2a: mainffa2a.cpp utility.hpp cmdlinea2a.hpp
+mainffa2a       : mainffa2a.cpp utility.hpp cmdlinea2a.hpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
-mainffa2aleak: mainffa2a.cpp utility.hpp cmdlinea2a.hpp
-	$(CXX) $(CXXFLAGS) $(VALGRINDFLAGS) $(INCLUDES) -I$(FF_ROOT) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
-clean:
-	rm -f $(TARGETS)
-
-cleanall: clean
+clean		: 
+	rm -f $(TARGETS) 
+cleanall	: clean
 	\rm -f *.o *~
+
+
+
