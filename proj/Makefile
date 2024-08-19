@@ -1,24 +1,46 @@
-CXX	   +=-std=c++20
-INCLUDES    = -I ./dependencies
-
-ifdef DEBUG
-    OPTIMIZE_FLAGS  += -g
-else
-    OPTIMIZE_FLAGS  += -O3 -DNDEBUG
+# 
+# FF_ROOT     pointing to the FastFlow root directory (i.e.
+#             the one containing the ff directory).
+ifndef FF_ROOT
+FF_ROOT		= /Users/lavo/Desktop/Projects/spm/fastflow
 endif
 
-OBJS            = dependencies/frechet_distance.o dependencies/frechet_distance2.o dependencies/geometry_basics.o
-TARGETS		= lshseq
+CXX		= g++ -std=c++20
+INCLUDES	= -I . -I miniz
+CXXFLAGS  	+= -Wall -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
+
+LDFLAGS 	= -pthread
+OPTFLAGS	= -O3 -ffast-math -DNDEBUG
+
+TARGETS		= compdecomp \
+		  ffc_farm \
+		  mainff \
+		  mainffa2a \
+		  mainseq
 
 .PHONY: all clean cleanall
 .SUFFIXES: .cpp 
 
-lshseq: lshseq.cpp $(OBJS) dependencies/frechet_distance.hpp dependencies/geometry_basics.hpp
+
 %: %.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $(OPTIMIZE_FLAGS) -o $@ $< $(OBJS) $(LDFLAGS) $(LIBS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
 all		: $(TARGETS)
+
+mainseq	: mainseq.cpp utility.hpp
+	$(CXX) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c
+
+mainff       : mainff.cpp utility.hpp cmdline.hpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
+
+mainffa2a       : mainffa2a.cpp utility.hpp cmdlinea2a.hpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
+
+
 clean		: 
-	rm -f $(TARGETS)
+	rm -f $(TARGETS) 
 cleanall	: clean
-	rm -f *.o *~ dependencies/*.o dependencies/*~
+	\rm -f *.o *~
+
+
+
