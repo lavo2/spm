@@ -6,6 +6,7 @@ FF_ROOT		= /Users/lavo/Desktop/Projects/spm/fastflow
 endif
 
 CXX		= g++ -std=c++20
+CXXMPI      = mpicxx -std=c++20
 INCLUDES	= -I . -I miniz
 CXXFLAGS  	+= -Wall -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
 
@@ -16,7 +17,8 @@ TARGETS		= compdecomp \
 		  ffc_farm \
 		  mainff \
 		  mainffa2a \
-		  mainseq
+		  mainseq \
+		  mainmpi
 
 .PHONY: all clean cleanall
 .SUFFIXES: .cpp 
@@ -35,6 +37,9 @@ mainff       : mainff.cpp utility.hpp cmdline.hpp
 
 mainffa2a       : mainffa2a.cpp utility.hpp cmdlinea2a.hpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
+
+mainmpi      : mainmpi.cpp 
+	$(CXXMPI) $(CXXFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
 
 clean		: 
