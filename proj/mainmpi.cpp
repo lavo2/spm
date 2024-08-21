@@ -10,13 +10,20 @@
 #include <cmdlinempi.hpp>
 #include <utilitympi.hpp>
 #include <iostream>
+#include <sstream>
+#include <cstring>  // For memcpy
+
+const int MAX_FILENAME_LENGTH = 512;  // Define a reasonable upper bound for the string length
+static size_t BIGFILE_LOW_THRESHOLD=2097152;
 
 
+//static int numFiles = -1;
 
 struct FileData_test {
         char filename[256];
         size_t size;
 };
+
 
 MPI_Datatype createFileDataType() {
     MPI_Datatype new_Type;
@@ -51,63 +58,77 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<FileData> fileDataVec;
+    std::vector<FileData_test> fileDataTestVec;
 
+    InitialHeader bcastData;
     if (!myrank){
             if (walkDirAndGetFiles(argv[start], fileDataVec, comp)) {
                 std::cout << "Files processed successfully." << std::endl;
+
+                fileDataTestVec.reserve(fileDataVec.size());
+                for (const auto& fileData : fileDataVec) {
+                    FileData_test fdt;
+                    std::strncpy(fdt.filename, fileData.filename, sizeof(fdt.filename));
+                    fdt.size = fileData.size;
+                    fileDataTestVec.push_back(fdt);
+                }
             } else {
             std::cerr << "Error processing files in directory." << std::endl;
             MPI_Abort(MPI_COMM_WORLD, -1);
         }
-    }
-    // Distribute the files across processes
-    int numFiles = fileDataVec.size();
-    std::vector<int> sendCounts(size, 0);  // Number of files each process will receive
-    std::vector<int> displs(size, 0);      // Displacements for scattering files
+        bcastData.numFiles = fileDataVec.size();
 
-    if (myrank == 0) {
-    // Determine the number of files each process should handle
-    int base = numFiles / size;
-    int remainder = numFiles % size;
-
+        int base = bcastData.numFiles / size;
+        int remainder = bcastData.numFiles % size;
         for (int i = 0; i < size; ++i) {
-            sendCounts[i] = base + (i < remainder ? 1 : 0);
-            if (i > 0) {
-                displs[i] = displs[i - 1] + sendCounts[i - 1];
-            }
+            bcastData.sendCounts[i] = base + (i < remainder ? 1 : 0);
+            bcastData.displs[i] = (i > 0) ? (bcastData.displs[i - 1] + bcastData.sendCounts[i - 1]) : 0;
         }
-        /*std::cout << "Number of files: " << numFiles << std::endl;
-        std::cout << "Number of files per process: ";
-        for (int i = 0; i < size; ++i) {
-            std::cout << sendCounts[i] << " ";
-        }
-        std::cout << std::endl;*/
     }
-
-    /*if (VERBOSE){
-		for (const auto& fileData : fileDataVec) {
-                    std::cout << "Filename: " << fileData.filename << ", Size: " << fileData.size << " bytes" << std::endl;
-                // Additional processing can be done here if needed
-	    }
-    }*/
-
-    // print the number of processes
-    std::cout<<"Number of processes: " <<size << std::endl;
-
-
     
+    MPI_Datatype iHeaderDataType = createIHeaderDataType(size);
+
+    MPI_Bcast(&bcastData, 1, iHeaderDataType, 0, MPI_COMM_WORLD);
+    //numFiles = bcastData.numFiles;
+
+
+    // now everyone knows how many files they will receive
+    //and can allocate the necessary memory
+
     MPI_Datatype fileDataType = createFileDataType();
 
+    std::vector<FileData_test> recvBuffer(bcastData.sendCounts[myrank]);
 
-    // ScatterV and GatherV
+    MPI_Scatterv(fileDataTestVec.data(), bcastData.sendCounts, bcastData.displs, fileDataType,
+                 recvBuffer.data(), bcastData.sendCounts[myrank], fileDataType, 0, MPI_COMM_WORLD);
 
-
-	
-    fileDataVec.clear();
-    MPI_Type_free(&fileDataType);
-    MPI_Finalize();
     
+    for (const auto& fileData : recvBuffer) {
+        std::cout << "Process " << myrank << " received file: " << fileData.filename 
+                  << ", Size: " << fileData.size << " bytes" << std::endl;
+    }
+
+    // add the rank to the filename
+    for (auto& fileData : recvBuffer) {
+        std::string filename(fileData.filename);
+        filename += "_";
+        filename += std::to_string(myrank);
+        std::strncpy(fileData.filename, filename.c_str(), sizeof(fileData.filename));
+    }
+
+    MPI_Gatherv(recvBuffer.data(), bcastData.sendCounts[myrank], fileDataType,
+                fileDataTestVec.data(), bcastData.sendCounts, bcastData.displs, fileDataType, 0, MPI_COMM_WORLD);
 
 
+    if (!myrank) {
+        std::cout << "All files received by process 0." << std::endl;
+        for (const auto& fileData : fileDataTestVec) {
+            std::cout << "File: " << fileData.filename << ", Size: " << fileData.size << " bytes" << std::endl;
+        }
+    }
+
+    MPI_Type_free(&fileDataType);
+    MPI_Type_free(&iHeaderDataType);
+    MPI_Finalize();
     return 0;
 }

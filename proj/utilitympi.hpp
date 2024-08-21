@@ -20,6 +20,12 @@
 #include <fstream>
 #include <iostream>
 
+#include <cmath> 
+#include <cassert>
+
+
+#include <mpi.h>
+
 
 
 #include <miniz/miniz.h>
@@ -240,6 +246,30 @@ static inline bool walkDirAndGetFiles(const char dname[], std::vector<FileData>&
 
         return true;
     }
+}
+
+
+struct InitialHeader {
+    int numFiles;
+    int sendCounts[128]; // Adjust size if needed, or dynamically allocate.
+    int displs[128];     // Adjust size if needed, or dynamically allocate.
+};
+
+
+MPI_Datatype createIHeaderDataType(int size) {
+    MPI_Datatype new_Type;
+    MPI_Datatype old_types[3] = { MPI_INT, MPI_INT, MPI_INT };
+    int blocklen[3] = { 1, size, size };
+
+    MPI_Aint offsets[3];
+    offsets[0] = offsetof(InitialHeader, numFiles);
+    offsets[1] = offsetof(InitialHeader, sendCounts);
+    offsets[2] = offsetof(InitialHeader, displs);
+
+    MPI_Type_create_struct(3, blocklen, offsets, old_types, &new_Type);
+    MPI_Type_commit(&new_Type);
+
+    return new_Type;
 }
 
 
