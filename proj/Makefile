@@ -38,7 +38,7 @@ mainff       : mainff.cpp utility.hpp cmdline.hpp
 mainffa2a       : mainffa2a.cpp utility.hpp cmdlinea2a.hpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
-mainmpi      : mainmpi.cpp 
+mainmpi      : mainmpi.cpp utilitympi.hpp cmdlinempi.hpp
 	$(CXXMPI) $(CXXFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
 
