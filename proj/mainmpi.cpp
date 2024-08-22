@@ -13,7 +13,6 @@
 #include <sstream>
 #include <cstring>  // For memcpy
 
-//const int MAX_FILENAME_LENGTH = 512;  // Define a reasonable upper bound for the string length
 
 
 //static int numFiles = -1;
@@ -21,20 +20,24 @@
 struct FileData_test {
         char filename[256];
         size_t size;
+        size_t nblock = 1;
+        size_t blockid = 0;
 };
 
 
 MPI_Datatype createFileDataType() {
     MPI_Datatype new_Type;
-    MPI_Datatype old_types[2] = { MPI_CHAR, MPI_UNSIGNED_LONG };
-    int blocklen[2] = { 256, 1 };
+    MPI_Datatype old_types[4] = { MPI_CHAR, MPI_UNSIGNED_LONG, MPI_UNSIGNED_LONG, MPI_UNSIGNED_LONG };
+    int blocklen[4] = { 256, 1, 1, 1 };
 
     // NOTE: using this since the MPI_Aint_displ in the slides is not working
-    MPI_Aint offsets[2];
+    MPI_Aint offsets[4];
     offsets[0] = offsetof(FileData_test, filename);
     offsets[1] = offsetof(FileData_test, size);
+    offsets[2] = offsetof(FileData_test, nblock);
+    offsets[3] = offsetof(FileData_test, blockid);
 
-    MPI_Type_create_struct(2, blocklen, offsets, old_types, &new_Type);
+    MPI_Type_create_struct(4, blocklen, offsets, old_types, &new_Type);
     MPI_Type_commit(&new_Type);
 
     return new_Type;
@@ -131,21 +134,24 @@ int main(int argc, char* argv[]) {
             std::memcpy(myDataWithHeader, &myrank, sizeof(int));
             std::memcpy(myDataWithHeader + sizeof(int), myData, recvBuffer[i].size);*/
             //unsigned char * inPtr = myData;	
-            size_t          inSize= recvBuffer[i].size;
+            size_t inSize= recvBuffer[i].size;
             size_t cmp_len = 0;
             unsigned char *ptrOut = nullptr;
             if(comp){
                 // get an estimation of the maximum compression size
-                size_t cmp_len = compressBound(inSize);
+                cmp_len = compressBound(inSize);
                 // allocate memory to store compressed data in memory
                 ptrOut = new unsigned char[cmp_len];
                 if (compress(ptrOut, &cmp_len, (const unsigned char *)myData, inSize) != Z_OK) {
-                    if (QUITE_MODE>=1) std::fprintf(stderr, "Failed to compress file in memory\n");
+                    if (QUITE_MODE>=1) {
+                        std::fprintf(stderr, "process %d, Failed to compress file %s in memory\n", myrank, recvBuffer[i].filename);
+                    }
                     //success = false;
                     delete [] ptrOut;
                     delete myData;
                     MPI_Abort(MPI_COMM_WORLD, -1);
                 }
+                std::cout << "Process " << myrank << " compressed file: " << recvBuffer[i].filename<<std::endl;
             }
             else{
                 cmp_len = std::min(inSize * 2, BIGFILE_LOW_THRESHOLD);
@@ -193,6 +199,7 @@ int main(int argc, char* argv[]) {
 
 
     if(myrank){
+        //ogni processo manda i dati compressi al processo 0
         for (int i = 0; i < bcastData.sendCounts[myrank]; ++i) {
             MPI_Send(myDataVec[i], recvBuffer[i].size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
             delete[] myDataVec[i];
@@ -220,11 +227,14 @@ int main(int argc, char* argv[]) {
                 cmp_len = compressBound(inSize);
                 // allocate memory to store compressed data in memory
                 ptrOut = new unsigned char[cmp_len];
+                int err;
+                if((err = compress(ptrOut, &cmp_len, (const unsigned char *)fileDataVec[bcastData.displs[0] + i].data.data(), inSize)) != Z_OK) {
+                    std::cerr << "Failed to decompress block, error: " << err << std::endl;                    fileDataVec[bcastData.displs[0] + i].data.clear();
+                    delete [] ptrOut;
+                    MPI_Abort(MPI_COMM_WORLD, -1);
 
-                if(!compress(ptrOut, &cmp_len, (const unsigned char *)fileDataVec[bcastData.displs[0] + i].data.data(), inSize)){
-                    if (QUITE_MODE>=1) std::fprintf(stderr, "Failed to compress file in memory\n");
-                    fileDataVec[bcastData.displs[0] + i].data.clear();
                 }
+                std::cout << "Process " << myrank << " compressed file: " << recvBuffer[i].filename<<std::endl;
             }
             else{
                 
