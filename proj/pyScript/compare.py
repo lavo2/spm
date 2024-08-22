@@ -20,6 +20,7 @@ def compare_files(file1_path, file2_path):
                         # print the size of the two lines
                         print(f"Line 1 size: {len(line1)} bytes")
                         print(f"Line 2 size: {len(line2)} bytes")
+                        break
 
 
     except FileNotFoundError as e:
@@ -28,5 +29,5 @@ def compare_files(file1_path, file2_path):
         print(f"An unexpected error occurred: {e}")
 
 # Example usage
-compare_files('/Users/lavo/Desktop/Projects/spm/proj2/dataset/test/file_5120KB.txt', 
-              '/Users/lavo/Desktop/Projects/spm/proj2/dataset/medium/file_5120KB.txt')
+compare_files('/Users/lavo/Desktop/Projects/spm/proj/dataset/test/small/file_1024KB.txt', 
+              '/Users/lavo/Desktop/Projects/spm/proj/dataset/small/file_1024KB.txt')

@@ -126,12 +126,12 @@ bool readFile(const std::string& filename, std::vector<unsigned char>& buffer) {
 }
 
 struct FileData {
-    size_t size;
     char filename[256];
+    size_t size;
     std::vector<unsigned char> data;
 
     // Constructor for easy initialization
-    FileData(size_t s, const char* fname, std::vector<unsigned char> d) 
+    FileData(const char* fname, size_t s, std::vector<unsigned char> d) 
         : size(s), data(std::move(d)) {
         // Copy filename with a limit to ensure it doesn't exceed 255 characters
         std::strncpy(filename, fname, sizeof(filename) - 1);
@@ -139,6 +139,8 @@ struct FileData {
         filename[sizeof(filename) - 1] = '\0';
     }
 };
+
+
 
 static inline bool walkDirAndGetFiles(const char dname[], std::vector<FileData>& fileDataVec, const bool comp, std::string relativePath = "") {
     struct stat statbuf;
@@ -211,8 +213,8 @@ static inline bool walkDirAndGetFiles(const char dname[], std::vector<FileData>&
                 std::vector<unsigned char> data;
                 if (!readFile(file->d_name, data)) return false;
 
-                // Create a FileData object with the relative path and store it in the vector
-                fileDataVec.emplace_back(size, (relativePath + file->d_name).c_str(), std::move(data));
+                // Create a FileData object with the new order and store it in the vector
+                fileDataVec.emplace_back((relativePath + file->d_name).c_str(), size, std::move(data));
             }
         }
 
@@ -241,12 +243,13 @@ static inline bool walkDirAndGetFiles(const char dname[], std::vector<FileData>&
         std::vector<unsigned char> data;
         if (!readFile(dname, data)) return false;
 
-        // Create a FileData object with the relative path and store it in the vector
-        fileDataVec.emplace_back(size, (relativePath + dname).c_str(), std::move(data));
+        // Create a FileData object with the new order and store it in the vector
+        fileDataVec.emplace_back((relativePath + dname).c_str(), size, std::move(data));
 
         return true;
     }
 }
+
 
 
 struct InitialHeader {
@@ -272,5 +275,27 @@ MPI_Datatype createIHeaderDataType(int size) {
     return new_Type;
 }
 
+struct Partition {
+	unsigned long npart;
+	unsigned char* ptr;
+	size_t size_part;
+	size_t size_uncompressed;
+};
+
+struct ReceiveFiles {
+    char filename[256];
+    size_t size;
+	unsigned long counts;
+	unsigned char* myData = nullptr;
+};
+
+bool decompressBlock(unsigned char* input, size_t inputSize, unsigned char* output, size_t& outputSize) {
+		int err;
+		if ((err = uncompress(output, &outputSize, input, inputSize)) != Z_OK) {
+			std::cerr << "Failed to decompress block, error: " << err << std::endl;
+			return false;
+		}
+		return true;
+	}
 
 #endif 
