@@ -314,17 +314,14 @@ bool mergeAndZip(const std::vector<DataRec>& dataRecVec, const size_t lastblocks
     }
     //write the number of blocks
     size_t numBlocks = dataRecVec[0].nblock;
-    fprintf(stderr, "numBlocks: %ld\n", numBlocks);
     outFile.write(reinterpret_cast<const char*>(&numBlocks), sizeof(size_t));
 
     //for each block, write the size of the block
     for (size_t i = 0; i < numBlocks; i++) {
-        fprintf(stderr, "size of block %ld: %ld\n", i, dataRecVec[i].size);
         size_t size = dataRecVec[i].size;
         outFile.write(reinterpret_cast<const char*>(&size), sizeof(size_t));
     }
     //write last block size for decompression
-    fprintf(stderr, "lastblocksize: %ld\n", lastblocksize);
     outFile.write(reinterpret_cast<const char*>(&lastblocksize), sizeof(size_t));
 
     //write all the data

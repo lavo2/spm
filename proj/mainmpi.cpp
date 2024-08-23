@@ -68,8 +68,12 @@ int main(int argc, char* argv[]) {
     std::vector<FileData> fileDataVec;
     std::vector<FileData_test> fileDataTestVec;
 
+    double start_time;
+
     InitialHeader bcastData;
     if (!myrank){
+        // take time with MPI
+        start_time = MPI_Wtime();
         if (walkDirAndGetFiles(argv[start], fileDataVec, comp)) {
             std::cout << "Files processed successfully." << std::endl;
 
@@ -196,7 +200,7 @@ int main(int argc, char* argv[]) {
     MPI_Scatterv(fileDataTestVec.data(), bcastData.sendCounts, bcastData.displs, fileDataType,
                  recvBuffer.data(), bcastData.sendCounts[myrank], fileDataType, 0, MPI_COMM_WORLD);
 
-    std::cout << "Process " << myrank << " received " << bcastData.sendCounts[myrank] << " files." << std::endl;
+    //std::cout << "Process " << myrank << " received " << bcastData.sendCounts[myrank] << " files." << std::endl;
 
     //store all the data untill all processes finish
     std::vector<unsigned char*> myDataVec(bcastData.sendCounts[myrank]);
@@ -386,7 +390,6 @@ int main(int argc, char* argv[]) {
 
             /* se ho tutto il file allora lo scrivo e rimuovo da alldata*/
             if (dr.blockid ==   dr.nblock){
-                std::cout<<"ho tutto il file"<<std::endl;
                 size_t lastblocksize = recvBuffer[i].lastblocksize;
                 if (comp){   
                     if(mergeAndZip(allData, lastblocksize)){
@@ -437,7 +440,6 @@ int main(int argc, char* argv[]) {
                 allData.push_back(dr);
 
                 if (dr.blockid ==   dr.nblock){
-                    std::cout<<"ho tutto il file"<<std::endl;
                     if(comp){ 
                         size_t lastblocksize = fileDataTestVec[bcastData.displs[i] + j].lastblocksize;
                         if(mergeAndZip(allData, lastblocksize)){
@@ -479,6 +481,8 @@ int main(int argc, char* argv[]) {
     }
     if (!myrank) {
         std::cout << "All files received by process 0." << std::endl;
+        double end_time = MPI_Wtime();
+        std::cout << "Elapsed time: " << end_time - start_time << " seconds." << std::endl;
         /*for (const auto& fileData : fileDataTestVec) {
             std::cout << "File: " << fileData.filename << ", Size: " << fileData.size << " bytes" << std::endl;
         }*/
