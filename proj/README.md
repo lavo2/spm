@@ -23,4 +23,4 @@ Options:
 # TODO
 check origialn file pointer deallocation (if already done eliminate filePtr from task)
 check memory leaks
-CHANGE ALL READ AND WRITE FILE WITH ONE IN UTILITY.HPP
+CHANGE ALL READ AND WRITE FILE WITH ONE IN UTILITY.HPP (maybe)
