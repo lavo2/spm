@@ -29,5 +29,5 @@ def compare_files(file1_path, file2_path):
         print(f"An unexpected error occurred: {e}")
 
 # Example usage
-compare_files('/Users/lavo/Desktop/Projects/spm/proj/dataset/test/small/file_1024KB.txt', 
-              '/Users/lavo/Desktop/Projects/spm/proj/dataset/small/file_1024KB.txt')
+compare_files('/Users/lavo/Desktop/Projects/spm/proj/dataset/test/big/file_512000KB.txt', 
+              '/Users/lavo/Desktop/Projects/spm/proj/dataset/big/file_512000KB.txt')

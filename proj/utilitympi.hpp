@@ -275,12 +275,7 @@ MPI_Datatype createIHeaderDataType(int size) {
     return new_Type;
 }
 
-struct Partition {
-	unsigned long npart;
-	unsigned char* ptr;
-	size_t size_part;
-	size_t size_uncompressed;
-};
+
 
 struct ReceiveFiles {
     char filename[256];
@@ -297,5 +292,79 @@ bool decompressBlock(unsigned char* input, size_t inputSize, unsigned char* outp
 		}
 		return true;
 	}
+
+struct DataRec {
+    char filename[256];
+    size_t size;
+    size_t nblock = 1;
+    size_t blockid = 0;
+    size_t lastblocksize = 0;
+    std::vector<unsigned char*> recDataVec;
+
+};
+
+bool mergeAndZip(const std::vector<DataRec>& dataRecVec, const size_t lastblocksize) {
+    std::string outfiles = dataRecVec[0].filename;
+    std::string outfile = outfiles + SUFFIX;
+    std::ofstream outFile(outfile, std::ios::binary);
+
+    if (!outFile.is_open()) {
+        std::cerr << "Failed to open output file: " << outfile << std::endl;
+        return false;
+    }
+    //write the number of blocks
+    size_t numBlocks = dataRecVec[0].nblock;
+    fprintf(stderr, "numBlocks: %ld\n", numBlocks);
+    outFile.write(reinterpret_cast<const char*>(&numBlocks), sizeof(size_t));
+
+    //for each block, write the size of the block
+    for (size_t i = 0; i < numBlocks; i++) {
+        fprintf(stderr, "size of block %ld: %ld\n", i, dataRecVec[i].size);
+        size_t size = dataRecVec[i].size;
+        outFile.write(reinterpret_cast<const char*>(&size), sizeof(size_t));
+    }
+    //write last block size for decompression
+    fprintf(stderr, "lastblocksize: %ld\n", lastblocksize);
+    outFile.write(reinterpret_cast<const char*>(&lastblocksize), sizeof(size_t));
+
+    //write all the data
+    for (size_t i = 0; i < numBlocks; i++) {
+        outFile.write(reinterpret_cast<const char*>(dataRecVec[i].recDataVec[0]), dataRecVec[i].size);
+    }
+
+    outFile.close();
+    if (REMOVE_ORIGIN) {
+        unlink(outfiles.c_str());
+    }
+
+    outFile.close();
+    return true;
+
+}
+
+bool mergeAndWrite(const std::vector<DataRec>& dataRecVec) {
+    std::string outfiles = dataRecVec[0].filename;
+    std::string outfile = outfiles.substr(0, outfiles.size() - 4);
+
+    std::ofstream outFile(outfile, std::ios::binary);
+	if (!outFile.is_open()) {
+        std::cerr << "Failed to open output file: " << outfile << std::endl;
+        return false;
+	}
+    size_t numBlocks = dataRecVec[0].nblock;
+
+    for (size_t i = 0; i < numBlocks; i++) {
+        outFile.write(reinterpret_cast<const char*>(dataRecVec[i].recDataVec[0]), dataRecVec[i].size);
+    }
+
+    if (REMOVE_ORIGIN) {
+        unlink(outfiles.c_str());
+    }
+    outFile.close();
+
+    return true;
+
+}
+    
 
 #endif 
