@@ -547,7 +547,7 @@ int main(int argc, char *argv[]) {
 	ffTime(STOP_TIME);
 	
     std::cout << "Time: " << ffTime(GET_TIME) << " (ms)\n";
-    std::cout << "pipe(A2A, merger) Time: " << pipe.ffTime() << " (ms)\n";
+    if(VERBOSE) std::cout << "pipe(A2A, merger) Time: " << pipe.ffTime() << " (ms)\n";
 
 	// -----------------------------------------------
 	

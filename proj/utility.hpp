@@ -595,7 +595,7 @@ static inline bool walkDirAndGetPtr(const char dname[], std::vector<FileData>& f
 
                 // Skip or include based on the 'comp' flag
                 if ((comp && isZipFile) || (!comp && !isZipFile)) {
-                    std::fprintf(stderr, "ignoring %s file %s\n", comp ? "compressed" : "non-compressed", file->d_name);
+                    if (VERBOSE) ::fprintf(stderr, "ignoring %s file %s\n", comp ? "compressed" : "non-compressed", file->d_name);
                     continue; // Skip if the conditions do not match
                 }
 

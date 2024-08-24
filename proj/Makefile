@@ -30,7 +30,7 @@ TARGETS		= compdecomp \
 all		: $(TARGETS)
 
 mainseq	: mainseq.cpp utility.hpp
-	$(CXX) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c
+	$(CXX) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c
 
 mainff       : mainff.cpp utility.hpp cmdline.hpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)

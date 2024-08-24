@@ -206,7 +206,7 @@ static inline bool walkDirAndGetFiles(const char dname[], std::vector<FileData>&
 
                 // Skip or include based on the 'comp' flag
                 if ((comp && isZipFile) || (!comp && !isZipFile)) {
-                    std::fprintf(stderr, "ignoring %s file %s\n", comp ? "compressed" : "non-compressed", file->d_name);
+                    if (QUITE_MODE>1) std::fprintf(stderr, "ignoring %s file %s\n", comp ? "compressed" : "non-compressed", file->d_name);
                     continue; // Skip if the conditions do not match
                 }
 
@@ -236,7 +236,7 @@ static inline bool walkDirAndGetFiles(const char dname[], std::vector<FileData>&
 
         // Skip or include based on the 'comp' flag
         if ((comp && isZipFile) || (!comp && !isZipFile)) {
-            std::fprintf(stderr, "ignoring %s file %s\n", comp ? "compressed" : "non-compressed", dname);
+           if(QUITE_MODE>1) std::fprintf(stderr, "ignoring %s file %s\n", comp ? "compressed" : "non-compressed", dname);
             return true; // Skip if the conditions do not match
         }
 

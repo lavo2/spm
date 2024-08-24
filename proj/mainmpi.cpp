@@ -75,18 +75,16 @@ int main(int argc, char* argv[]) {
         // take time with MPI
         //start_time = MPI_Wtime();
         if (walkDirAndGetFiles(argv[start], fileDataVec, comp)) {
-            std::cout << "Files processed successfully." << std::endl;
+            if(VERBOSE) std::cout << "Files processed successfully." << std::endl;
 
             fileDataTestVec.reserve(fileDataVec.size());
             
             for (size_t f = 0; f < fileDataVec.size(); ++f) {
                 if(!comp) {
-                    std::cout << "File: " << fileDataVec[f].filename << ", Size: " << fileDataVec[f].size << " bytes" << std::endl;
                     //read the first 8 bytes to get the number of blocks
                     size_t offset = 0;
                     size_t nblocks = 0;
                     std::memcpy(&nblocks, fileDataVec[f].data.data(), sizeof(size_t));
-                    std::cout << "Block size: " << nblocks << std::endl;
                     offset += sizeof(size_t);
                     //for each block read the size of the blocks
                     std::vector<size_t> blockSizes;
@@ -94,13 +92,11 @@ int main(int argc, char* argv[]) {
                         size_t blocksize = 0;
                         std::memcpy(&blocksize, fileDataVec[f].data.data() + offset, sizeof(size_t));
                         offset += sizeof(size_t);
-                        std::cout << "Block " << i << " out of " << nblocks << " has size: " << blocksize << std::endl;
                         blockSizes.push_back(blocksize);
                     }
                     size_t lastblocksize = 0;
                     std::memcpy(&lastblocksize, fileDataVec[f].data.data() + offset, sizeof(size_t));
                     offset += sizeof(size_t);
-                    std::cout << "Last block size: " << lastblocksize << std::endl;
                     FileData_test fdt;
                     for(size_t i = 0; i < nblocks; ++i) {
                         std::memcpy(fdt.filename, fileDataVec[f].filename, sizeof(fdt.filename));
@@ -111,7 +107,6 @@ int main(int argc, char* argv[]) {
                         fdt.fileIndex = f;
                         fdt.lastblocksize = lastblocksize;
                         fdt.offset = offset;
-                        std::cout << "File: " << fdt.filename << ", Size: " << fdt.size << " offset" << fdt.offset<<std::endl;
                         fileDataTestVec.push_back(fdt);
                         offset += blockSizes[i];
                     }
@@ -164,10 +159,6 @@ int main(int argc, char* argv[]) {
                 }
             }
             // print fileDataTestVec
-            for (long unsigned int i = 0; i < fileDataTestVec.size(); ++i) {
-                std::cout << "File: " << fileDataTestVec[i].filename << ", Size: " << fileDataTestVec[i].size << " bytes" <<
-                " nblock: " << fileDataTestVec[i].nblock << " blockid: " << fileDataTestVec[i].blockid << std::endl;
-            }
         } else {
             std::cerr << "Error processing files in directory." << std::endl;
             MPI_Abort(MPI_COMM_WORLD, -1);
@@ -181,12 +172,11 @@ int main(int argc, char* argv[]) {
         bcastData.sendCounts[i] = base + (i < remainder ? 1 : 0);
         bcastData.displs[i] = (i > 0) ? (bcastData.displs[i - 1] + bcastData.sendCounts[i - 1]) : 0;
     }
-    std::cout<<std::endl<<std::endl<<std::endl;
     MPI_Datatype iHeaderDataType = createIHeaderDataType(size);
 
     //bdacst the information needed to all the processes (inclusing process 0)
     MPI_Bcast(&bcastData, 1, iHeaderDataType, 0, MPI_COMM_WORLD);
-    std::cout << "Process " << myrank << " will receive " << bcastData.sendCounts[myrank] << " files." << std::endl;
+    if(VERBOSE) std::cout << "Process " << myrank << " will receive " << bcastData.sendCounts[myrank] << " files." << std::endl;
 
     //numFiles = bcastData.numFiles;
 
@@ -397,14 +387,14 @@ int main(int argc, char* argv[]) {
                 size_t lastblocksize = recvBuffer[i].lastblocksize;
                 if (comp){   
                     if(mergeAndZip(allData, lastblocksize)){
-                        std::cout << "File " << dr.filename << " merged and zipped successfully." << std::endl;
+                        if(VERBOSE) std::cout << "File " << dr.filename << " merged and zipped successfully." << std::endl;
                     } else {
                         std::cerr << "Error merging and zipping file: " << dr.filename << std::endl;
                         MPI_Abort(MPI_COMM_WORLD, -1);
                     }
                 }else{
                     if(mergeAndWrite(allData)){
-                        std::cout << "File " << dr.filename << " merged and written successfully." << std::endl;
+                        if(VERBOSE) std::cout << "File " << dr.filename << " merged and written successfully." << std::endl;
                     } else {
                         std::cerr << "Error merging and writing file: " << dr.filename << std::endl;
                         MPI_Abort(MPI_COMM_WORLD, -1);
@@ -447,7 +437,7 @@ int main(int argc, char* argv[]) {
                     if(comp){ 
                         size_t lastblocksize = fileDataTestVec[bcastData.displs[i] + j].lastblocksize;
                         if(mergeAndZip(allData, lastblocksize)){
-                            std::cout << "File " << dr.filename << " merged and zipped successfully." << std::endl;
+                            if(VERBOSE) std::cout << "File " << dr.filename << " merged and zipped successfully." << std::endl;
                         } else {
                             std::cerr << "Error merging and zipping file: " << dr.filename << std::endl;
                             MPI_Abort(MPI_COMM_WORLD, -1);
@@ -455,7 +445,7 @@ int main(int argc, char* argv[]) {
                     }
                     else{
                         if(mergeAndWrite(allData)){
-                            std::cout << "File " << dr.filename << " merged and written successfully." << std::endl;
+                            if(VERBOSE) std::cout << "File " << dr.filename << " merged and written successfully." << std::endl;
                         } else {
                             std::cerr << "Error merging and writing file: " << dr.filename << std::endl;
                             MPI_Abort(MPI_COMM_WORLD, -1);
@@ -478,15 +468,15 @@ int main(int argc, char* argv[]) {
         std::cout << "File: " << fileDataVec[i].filename << ", Size: " << fileDataVec[i].size << " bytes" <<
         " lenght of data: " << fileDataVec[i].data.size() << std::endl;
     }*/
-    for (long unsigned int i = 0; i < recDataVec.size(); ++i) {
-        delete[] recDataVec[i];
-    }
+        for (long unsigned int i = 0; i < recDataVec.size(); ++i) {
+            delete[] recDataVec[i];
+        }
     }
 
     double end_time = MPI_Wtime();
 
     if (!myrank) {
-        std::cout << "All files received by process 0." << std::endl;
+        if(VERBOSE) std::cout << "All files received by process 0." << std::endl;
         //print int milliseconds
         std::cout << "Elapsed time: " << (end_time - start_time) * 1000 << " milliseconds." << std::endl;
 
