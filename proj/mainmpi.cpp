@@ -258,8 +258,8 @@ int main(int argc, char* argv[]) {
                 int err;
                 if ((err = uncompress(ptrOut, &cmp_len, (const unsigned char *)myData, inSize)) != Z_OK) {
                     std::cerr << "process"<< myrank<<"Failed to decompress block, error: " << err << std::endl;
-                    delete [] ptrOut;
-                    delete myData;
+                    delete[] ptrOut;
+                    delete[] myData;
                     MPI_Abort(MPI_COMM_WORLD, -1);
                 }
 
