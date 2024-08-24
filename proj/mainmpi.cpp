@@ -68,12 +68,12 @@ int main(int argc, char* argv[]) {
     std::vector<FileData> fileDataVec;
     std::vector<FileData_test> fileDataTestVec;
 
-    double start_time;
+    double start_time = MPI_Wtime();
 
     InitialHeader bcastData;
     if (!myrank){
         // take time with MPI
-        start_time = MPI_Wtime();
+        //start_time = MPI_Wtime();
         if (walkDirAndGetFiles(argv[start], fileDataVec, comp)) {
             std::cout << "Files processed successfully." << std::endl;
 
@@ -140,7 +140,9 @@ int main(int argc, char* argv[]) {
                         }
                         if (partialblock) {
                             FileData_test fdt;
-                            std::strncpy(fdt.filename, fileDataVec[f].filename, sizeof(fdt.filename));
+                            //std::strncpy(fdt.filename, fileDataVec[f].filename, sizeof(fdt.filename));
+                            std::memcpy(fdt.filename, fileDataVec[f].filename, sizeof(fdt.filename) - 1);
+                            fdt.filename[sizeof(fdt.filename) - 1] = '\0';
                             fdt.size = partialblock;
                             fdt.nblock = fullblocks+1;
                             fdt.blockid = fullblocks+1;
@@ -162,7 +164,7 @@ int main(int argc, char* argv[]) {
                 }
             }
             // print fileDataTestVec
-            for (int i = 0; i < fileDataTestVec.size(); ++i) {
+            for (long unsigned int i = 0; i < fileDataTestVec.size(); ++i) {
                 std::cout << "File: " << fileDataTestVec[i].filename << ", Size: " << fileDataTestVec[i].size << " bytes" <<
                 " nblock: " << fileDataTestVec[i].nblock << " blockid: " << fileDataTestVec[i].blockid << std::endl;
             }
@@ -243,8 +245,8 @@ int main(int argc, char* argv[]) {
                         std::cerr << "process"<< myrank<<"Failed to compress block, error: " << err << std::endl;
                     }
                     //success = false;
-                    delete [] ptrOut;
-                    delete myData;
+                    delete[] ptrOut;
+                    delete[] myData;
                     MPI_Abort(MPI_COMM_WORLD, -1);
                 }
                 //std::cout << "Process " << myrank << " compressed file: " << recvBuffer[i].filename<<std::endl;
@@ -374,9 +376,11 @@ int main(int argc, char* argv[]) {
             recvBuffer[i].size = cmp_len;
             fileDataTestVec[bcastData.displs[0] + i].size = cmp_len;
             //fileDataVec[bcastData.displs[0] + i].data.clear();
-
             DataRec dr;
-            std::strncpy(dr.filename, recvBuffer[i].filename, sizeof(dr.filename));
+            std::memcpy(dr.filename, recvBuffer[i].filename, sizeof(dr.filename));
+            dr.filename[sizeof(dr.filename) - 1] = '\0';
+
+            //std::strncpy(dr.filename, recvBuffer[i].filename, sizeof(dr.filename));
             dr.size = recvBuffer[i].size;
             dr.recDataVec.push_back(ptrOut);
             dr.blockid = recvBuffer[i].blockid;
@@ -474,15 +478,19 @@ int main(int argc, char* argv[]) {
         std::cout << "File: " << fileDataVec[i].filename << ", Size: " << fileDataVec[i].size << " bytes" <<
         " lenght of data: " << fileDataVec[i].data.size() << std::endl;
     }*/
-    for (int i = 0; i < recDataVec.size(); ++i) {
+    for (long unsigned int i = 0; i < recDataVec.size(); ++i) {
         delete[] recDataVec[i];
     }
-        
     }
+
+    double end_time = MPI_Wtime();
+
     if (!myrank) {
         std::cout << "All files received by process 0." << std::endl;
-        double end_time = MPI_Wtime();
-        std::cout << "Elapsed time: " << end_time - start_time << " seconds." << std::endl;
+        //print int milliseconds
+        std::cout << "Elapsed time: " << (end_time - start_time) * 1000 << " milliseconds." << std::endl;
+
+        //std::cout << "Elapsed time: " << end_time - start_time << " seconds." << std::endl;
         /*for (const auto& fileData : fileDataTestVec) {
             std::cout << "File: " << fileData.filename << ", Size: " << fileData.size << " bytes" << std::endl;
         }*/

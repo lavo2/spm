@@ -360,7 +360,7 @@ struct Merger : ff_minode_t<Task> {
 
 
 		handleMultiBlock(in);
-		// print to use the variable or it gives a warning
+		// print to use the Rw variable or it gives a warning
 		if (in->filename == "_warning_") {
 			std::cerr << "Error in Merger, R-workers: " << Rw << std::endl;
 		}
