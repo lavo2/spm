@@ -2,7 +2,7 @@
 # FF_ROOT     pointing to the FastFlow root directory (i.e.
 #             the one containing the ff directory).
 ifndef FF_ROOT
-FF_ROOT		= /Users/lavo/Desktop/Projects/spm/fastflow
+FF_ROOT		= ../fastflow
 endif
 
 CXX		= g++ -std=c++20

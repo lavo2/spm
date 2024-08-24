@@ -143,7 +143,7 @@ struct L_Worker : ff::ff_monode_t<Task> {
      
     Task *svc(Task *task) {
 
-        const int nw = get_num_outchannels(); // gets the total number of workers added to the farm
+        //const int nw = get_num_outchannels(); // gets the total number of workers added to the farm
 
 		// for each file assigned to this worker
         for (size_t i = 0; i < group.size(); ++i) {
@@ -500,7 +500,7 @@ int main(int argc, char *argv[]) {
 
     //Output the groups
 	if (VERBOSE) {
-		for (int i = 0; i < Lw; ++i) {
+		for (size_t i = 0; i < Lw; ++i) {
 			std::cout << "Group " << i + 1 << ":\n";
 			for (const auto& file : groups[i]) {
 				std::cout << "  " << file.filename << " (Size: " << file.size << ")\n";

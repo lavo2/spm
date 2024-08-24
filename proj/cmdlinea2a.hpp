@@ -28,7 +28,6 @@
 static long lworkers=0;  // the number of left Workers
 static long rworkers=0;  // the number of right Workers
 static bool cc=false;    // concurrency control, default is blocking
-static bool aN=1;        // parameter of the set_scheduling_ondemand (i.e. channel's capacity
 // ------------------------------------------------------------------------------------------
 
 static inline void usage(const char *argv0) {
