@@ -38,14 +38,14 @@ run_experiments() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Command template for ./mainffa2a
     cmd_template="../mainffa2a {params} /Users/lavo/Desktop/Projects/spm/proj/dataset/test/big"
-    param_sets=("-C 0 -l 2 -r 5 -t 2097152 -v 0" 
-                "-D 0 -l 2 -r 5 -t 2097152 -v 0"
-                "-C 0 -l 2 -r 10 -t 2097152 -v 0"
-                "-D 0 -l 2 -r 10 -t 2097152 -v 0"
-                "-C 0 -l 2 -r 5 -t 4194304 -v 0"
-                "-D 0 -l 2 -r 5 -t 4194304 -v 0"
-                "-C 0 -l 2 -r 10 -t 4194304 -v 0"
-                "-D 0 -l 2 -r 10 -t 4194304 -v 0")
+    param_sets=("-C 0 -l 2 -w 5 -v 0" 
+                "-D 0 -l 2 -w 5 -v 0"
+                "-C 0 -l 2 -w 10 -v 0"
+                "-D 0 -l 2 -w 10 -v 0"
+                "-C 0 -l 2 -w 5 -t 4 -v 0"
+                "-D 0 -l 2 -w 5 -t 4 -v 0"
+                "-C 0 -l 2 -w 10 -t 4 -v 0"
+                "-D 0 -l 2 -w 10 -t 4 -v 0")
 
     # Run experiments for the command template
     run_experiments "$cmd_template" "${param_sets[@]}"

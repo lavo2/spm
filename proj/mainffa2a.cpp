@@ -94,7 +94,7 @@ struct L_Worker : ff::ff_monode_t<Task> {
 			size_t numBlocks = header;
 
 			// Read the sizes of each block
-
+			if (QUITE_MODE>2) std::cout << "numBlocks: " << numBlocks << std::endl;
 			std::vector<size_t> blockSizes(numBlocks);
 			for (size_t i = 0; i < numBlocks; ++i) {
 				size_t blockSize;

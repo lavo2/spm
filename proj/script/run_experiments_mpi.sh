@@ -53,10 +53,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # Command template for mpirun with ./mainmpi
     cmd_template="mpirun -n {params1} ../mainmpi {params2} /Users/lavo/Desktop/Projects/spm/proj/dataset/test/medium"
     param_sets1=("8")
-    param_sets2=("-C 0 -t 2097152 -v 0"
-                 "-D 0 -t 2097152 -v 0"
-                 "-C 0 -t 33554432 -v 0"
-                 "-D 0 -t 33554432 -v 0")
+    param_sets2=("-C 0 -t 2 -v 0"
+                 "-D 0 -t 2 -v 0"
+                 "-C 0 -t 32 -v 0"
+                 "-D 0 -t 32 -v 0")
 
     # Run experiments for the command template
     run_mpi_experiments "$cmd_template" "${param_sets1[@]}" "${param_sets2[@]}"
