@@ -30,7 +30,6 @@
 using namespace ff;
 
 
-// TODO: modify the following for a2a 
 struct Task {
     Task(unsigned char *ptr, size_t size, const std::string &name):
         ptr(ptr),size(size),filename(name) {}
@@ -51,13 +50,14 @@ struct Task {
 
 
 struct L_Worker : ff::ff_monode_t<Task> {
-    L_Worker(const std::vector<FileData>& group, bool compr) : group(group), compr(compr) {}
+    L_Worker(const std::vector<FileData>& group) : group(group) {}
 
 	bool doWorkCompress(unsigned char *ptr, size_t size, const std::string &fname) {
 		if (size<= BIGFILE_LOW_THRESHOLD) {
-			//Task *t = new Task(ptr, size, fname);
+			/* if a file is smaller than the threshold it does not need partitioning */
 			ff_send_out(new Task(ptr, size, fname)); // sending to the next stage
 		} else {
+			/* if a file is bigger than the threshold it needs partitioning */
 			const size_t fullblocks  = size / BIGFILE_LOW_THRESHOLD;
 			const size_t partialblock= size % BIGFILE_LOW_THRESHOLD;
 			for(size_t i=0;i<fullblocks;++i) {
@@ -65,6 +65,7 @@ struct L_Worker : ff::ff_monode_t<Task> {
 				t->blockid=i+1;
 				t->nblocks=fullblocks+(partialblock>0);
 				t->isSingleBlock=false;
+				// the files are sent to the next stage in a round-robin fashion
 				ff_send_out(t); // sending to the next stage
 			}
 			if (partialblock) {
@@ -72,7 +73,6 @@ struct L_Worker : ff::ff_monode_t<Task> {
 				t->blockid=fullblocks+1;
 				t->nblocks=fullblocks+1;
 				t->isSingleBlock=false;
-				//std::cout << "Partial block: " << partialblock << std::endl;
 				ff_send_out(t); // sending to the next stage
 			}
 		}
@@ -85,7 +85,6 @@ struct L_Worker : ff::ff_monode_t<Task> {
 		size_t header;
 		memcpy(&header, ptr, sizeof(header));
 		
-		//std::cout << "Header: " << header << std::endl;
 		if (header == 0) {
 			// Single block file
 			ff_send_out(new Task(ptr, size, fname));
@@ -99,25 +98,25 @@ struct L_Worker : ff::ff_monode_t<Task> {
 			std::vector<size_t> blockSizes(numBlocks);
 			for (size_t i = 0; i < numBlocks; ++i) {
 				size_t blockSize;
-				//inFile.read(reinterpret_cast<char*>(&blockSize), sizeof(blockSize));
+				// we have to consider the offset of the header
 				memcpy(&blockSize, ptr + sizeof(header) + i * sizeof(blockSize), sizeof(blockSize));
 				blockSizes[i] = blockSize;
-
-				//std::cout << "Block " << i << " size: " << blockSize << std::endl;
 			}
-
+			/* when decompressing a multi-block file, every block will be BIGFILE_LOW_THRESHOLD
+			 * except the last one that will be the remaining size */
 			size_t lastBlock;
 			memcpy(&lastBlock, ptr + sizeof(header) + numBlocks * sizeof(size_t), sizeof(lastBlock));
 
+			//calculate the size of the header, which will be the offset
 			size_t headerSize = sizeof(header) + numBlocks * sizeof(size_t) + sizeof(lastBlock);
 
+			//now we have the information to read the data
 			size_t currentPos = 0;
 			for (size_t i = 0; i < numBlocks; ++i) {
 				// Read the compressed data of each block
 				size_t blockSize = blockSizes[i];
 				unsigned char *blockDataPtr = new unsigned char[blockSize];
 				
-				//inFile.read(reinterpret_cast<char*>(blockDataPtr), blockSize);
 				memcpy(blockDataPtr, ptr + headerSize + currentPos, blockSize);
 				currentPos += blockSize;
 				
@@ -131,23 +130,25 @@ struct L_Worker : ff::ff_monode_t<Task> {
 				}
 				ff_send_out(t);
 			}
+
+			// CHECK since i send copy of the datablock I should be able to delete the original one
+			//delete[] ptr;
 			return true;
 		}
 		std::cerr << "Error with the header during decompression" << std::endl;
 		return false;
 	}
 
+	/* Task for the Left Workers */
      
     Task *svc(Task *task) {
 
         const int nw = get_num_outchannels(); // gets the total number of workers added to the farm
 
-		std::cout << "L_Worker, current worker: " << get_my_id() 
-        << " Number of Workers: " << nw << " Number of Files: " << group.size() << std::endl;
+		// for each file assigned to this worker
         for (size_t i = 0; i < group.size(); ++i) {
 			const FileData& file = group[i];
-			//std::cout << "  " << file.filename << " (Size: " << file.size << ")\n";
-			if (compr){
+			if (comp){
 				if (!doWorkCompress(file.ptr, file.size, file.filename)){
 					error("doWorkCompress\n");
 					return EOS;
@@ -159,19 +160,19 @@ struct L_Worker : ff::ff_monode_t<Task> {
 					return EOS;
 				}
 			}
-			//ff_send_out(new Task(file.ptr, file.size, file.filename));
 		}
-
-		//ora provare a fare gli split dei file e inviarli ai workers
         
         return EOS;
 
     }
 	private:
 		std::vector<FileData> group;
-		bool compr;
 };
 
+//--------------------------------------------------------------------
+// R_Worker: compress/decompress the files
+// If the block is a single file, it will be handled by the worker
+// If the block is part of a multi-block file, it will be sent to the merger
 
 struct R_Worker : ff_minode_t<Task> {
     R_Worker(size_t Lw) : Lw(Lw) {}
@@ -181,6 +182,7 @@ struct R_Worker : ff_minode_t<Task> {
        // std::cout << "R_Worker, current worker: " << get_my_id() << " Filename: " << in->filename << std::endl;
 
 		if (comp) {
+			//--------------compression
 			unsigned char * inPtr = in->ptr;	
 			size_t          inSize= in->size;
 			// get an estimation of the maximum compression size
@@ -259,7 +261,7 @@ struct R_Worker : ff_minode_t<Task> {
 		// Read the entire file into memory
 		inFile.seekg(0, std::ios::end);
 		size_t fileSize = inFile.tellg();
-		inFile.seekg(4, std::ios::beg);  // Skip the header byte
+		inFile.seekg(8, std::ios::beg);  // Skip the header byte
 
 		size_t compressedSize = fileSize - 4;  // Exclude the header byte
 		std::vector<unsigned char> compressedData(compressedSize);
@@ -459,6 +461,11 @@ private:
 };
 
 
+
+/**** MAIN ****/
+
+
+
 int main(int argc, char *argv[]) {    
     if (argc < 2) {
         usage(argv[0]);
@@ -470,14 +477,12 @@ int main(int argc, char *argv[]) {
 
 	ffTime(START_TIME);
 	
-
+	//fileDataVec is a vector of FileData with the information of the requested files
 	std::vector<FileData> fileDataVec;
-    
-	
+	//implementation in utils.hpp
     if (!walkDirAndGetPtr(argv[start], fileDataVec, comp)) {
         std::cerr << "Failed to walk directory" << std::endl;
     }
-
 	if (VERBOSE){
 		for (auto& fileData : fileDataVec) {
 			// print fileData.filename, fileData.size, fileData.ptr
@@ -489,11 +494,11 @@ int main(int argc, char *argv[]) {
 
 	const size_t Lw = lworkers;
     const size_t Rw = rworkers;
-	bool compr = comp;
 
+	// Distribute the files into groups, one for each L-Worker
 	std::vector<std::vector<FileData>> groups = distributeFiles(fileDataVec, Lw);
 
-    // Output the groups
+    //Output the groups
 	if (VERBOSE) {
 		for (int i = 0; i < Lw; ++i) {
 			std::cout << "Group " << i + 1 << ":\n";
@@ -508,39 +513,32 @@ int main(int argc, char *argv[]) {
 	// FastFlow part
 
 	if(VERBOSE){
-		if (compr)
+		if (comp)
 			std::cout << "Current task: Compression\n";
 		else
 			std::cout << "Current task: Decompression\n";
 	}
 	
-
-
-	std::cout << "creo gli array di workers" << std::endl;
     std::vector<ff_node*> LW;
     std::vector<ff_node*> RW;
 
-	std::cout << "creo i left workers" << std::endl;
 	for(size_t i=0; i<Lw; ++i) {
-		LW.push_back(new L_Worker(groups[i],compr));
+		LW.push_back(new L_Worker(groups[i]));
     }
 
-	std::cout << "creo i right workers" << std::endl;
 	for(size_t i=0;i<Rw;++i)
 		RW.push_back(new R_Worker(Lw));
 
-
+	// the merger will be the last stage and will work only on multi-block files
 	Merger merger(Rw);
 
-	std::cout << "creo ff a2a" << std::endl;
 	ff_a2a a2a;
     a2a.add_firstset(LW, 0); //, 1 , true);
     a2a.add_secondset(RW); //, true);
 
-	std::cout << "creo la pipa" << std::endl;
+	// pipe with a2a and merger
 	ff_Pipe<> pipe(a2a, merger);
     
-	std::cout << "runno e waito" << std::endl;
 	if (pipe.run_and_wait_end()<0) {
 		error("running a2a\n");
 		return -1;
@@ -555,12 +553,9 @@ int main(int argc, char *argv[]) {
 	
 	// cleanup
 
-
-
 	for (auto& fileData : fileDataVec) {
 		if(fileData.ptr != nullptr)
 			unmapFile(fileData.ptr, fileData.size);
 		}
-    std::cout << "test!" << std::endl;
-    return 0;
+	return 0;
 }

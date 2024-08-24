@@ -42,11 +42,12 @@ static inline void usage(const char *argv0) {
     std::printf(" -C compress: 0 preserves, 1 removes the original file (default C=0)\n");
     std::printf(" -D decompress: 0 preserves, 1 removes the original file\n");
     std::printf(" -q 0 silent mode, 1 prints only error messages to stderr, 2 verbose (default q=1)\n");
-    std::printf(" -a asynchrony degree for the on-demand policy (default a=1)\n");
+    //std::printf(" -a asynchrony degree for the on-demand policy (default a=1)\n");
     std::printf(" -b 0 blocking, 1 non-blocking concurrency control (default b=0)\n");
 	std::printf(" -v 0 normal, 1 verbose for debugging\n");
     std::printf("--------------------\n");
 }
+
 
 int parseCommandLine(int argc, char *argv[]) {
     extern char *optarg;
@@ -54,7 +55,7 @@ int parseCommandLine(int argc, char *argv[]) {
     
     lworkers = 2;
 	rworkers = ff_numCores()-2-1;
-    long opt, aN = 1, start = 1;
+    long opt, start = 1;
     bool cpresent=false, dpresent=false;
     while((opt = getopt(argc, argv, optstr.c_str())) != -1) {
 	switch(opt) {
@@ -131,15 +132,6 @@ int parseCommandLine(int argc, char *argv[]) {
 	    }	    	    
 	    QUITE_MODE=q;
 	    start+=2; 
-	} break;
-	case 'a': {
-	    if (!isNumber(optarg, aN)) {
-		std::fprintf(stderr, "Error: wrong '-a' option\n");
-		usage(argv[0]);
-		return -1;
-	    }	    	    
-	    aN = std::min(1l, aN);
-	    start+=2;
 	} break;
 	case 'b': {
 	    long b=0;
