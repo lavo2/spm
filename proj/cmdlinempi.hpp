@@ -4,13 +4,7 @@
 #include <mpi.h>
 #include <utilitympi.hpp>
 
-// Global variables
-static long BIGFILE_LOW_THRESHOLD = 2 * 1024 * 1024; // Default threshold in bytes (2 MB)
-static bool RECUR = false;
-static bool REMOVE_ORIGIN = false;
-static bool comp = true; // Indicates compression or decompression mode
-static int QUITE_MODE = 1;
-static int VERBOSE = 0;
+
 
 // ------------------------------------------------------------------------------------------
 

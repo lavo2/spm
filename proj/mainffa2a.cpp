@@ -55,7 +55,12 @@ struct L_Worker : ff::ff_monode_t<Task> {
 	bool doWorkCompress(unsigned char *ptr, size_t size, const std::string &fname) {
 		if (size<= BIGFILE_LOW_THRESHOLD) {
 			/* if a file is smaller than the threshold it does not need partitioning */
-			ff_send_out(new Task(ptr, size, fname)); // sending to the next stage
+			/* we save the information to create the header */
+			Task *t = new Task(ptr, size, fname);
+			t->isSingleBlock=true;
+			t->nblocks=1;
+			t->lastBlock=size;
+			ff_send_out(t); // sending to the next stage
 		} else {
 			/* if a file is bigger than the threshold it needs partitioning */
 			const size_t fullblocks  = size / BIGFILE_LOW_THRESHOLD;
@@ -85,7 +90,7 @@ struct L_Worker : ff::ff_monode_t<Task> {
 		size_t header;
 		memcpy(&header, ptr, sizeof(header));
 		
-		if (header == 0) {
+		if (header == 1) {
 			// Single block file
 			ff_send_out(new Task(ptr, size, fname));
 			return true;
@@ -182,6 +187,7 @@ struct R_Worker : ff_minode_t<Task> {
        // std::cout << "R_Worker, current worker: " << get_my_id() << " Filename: " << in->filename << std::endl;
 
 		if (comp) {
+			//std::cout << "Compressing file: " << in->filename << std::endl;
 			//--------------compression
 			unsigned char * inPtr = in->ptr;	
 			size_t          inSize= in->size;
@@ -252,6 +258,16 @@ struct R_Worker : ff_minode_t<Task> {
 	}
 
 	bool decompressSingleBlock(Task* in) {
+
+    // Read the first three 8-byte values from the beginning of the file
+    	size_t* header = reinterpret_cast<size_t*>(in->ptr);
+    	//size_t value1 = header[0];
+    	//size_t value2 = header[1];
+    	size_t uncompressedSize = header[2];
+
+		//std::cout << "Header values: " << value1 << ", " << value2 << ", " << uncompressedSize << std::endl;
+
+		/*
 		std::ifstream inFile(in->filename, std::ios::binary);
 		if (!inFile.is_open()) {
 			std::cerr << "Failed to open input file: " << in->filename << std::endl;
@@ -261,20 +277,26 @@ struct R_Worker : ff_minode_t<Task> {
 		// Read the entire file into memory
 		inFile.seekg(0, std::ios::end);
 		size_t fileSize = inFile.tellg();
-		inFile.seekg(8, std::ios::beg);  // Skip the header byte
+		inFile.seekg(sizeof(size_t)*3, std::ios::beg);  // Skip the header byte
 
-		size_t compressedSize = fileSize - 4;  // Exclude the header byte
-		std::vector<unsigned char> compressedData(compressedSize);
+		*/
+		size_t compressedSize = in->size - (3 * sizeof(size_t));  // Exclude the header byte
+		unsigned char* compressedData = in->ptr + (3 * sizeof(size_t));
+
+		unsigned char* uncompressedData = new unsigned char[uncompressedSize];
+
+
+		/*std::vector<unsigned char> compressedData(compressedSize);
 		inFile.read(reinterpret_cast<char*>(compressedData.data()), compressedSize);
-		inFile.close();
+		inFile.close();*/
 
 		// Prepare buffer for decompression (estimate size needed)
 		// smallest beetwen 2*compressedSize and BIGFILE_LOW_THRESHOLD
-		size_t uncompressedSize = std::min(compressedSize * 2, BIGFILE_LOW_THRESHOLD);
-		std::vector<unsigned char> uncompressedData(uncompressedSize);
+		//size_t uncompressedSize = std::min(compressedSize * 2, BIGFILE_LOW_THRESHOLD);
+		//std::vector<unsigned char> uncompressedData(uncompressedSize);
 
 		// Decompress
-		if (!decompressBlock(compressedData.data(), compressedSize, uncompressedData.data(), uncompressedSize)) {
+		if (!decompressBlock(compressedData, compressedSize, uncompressedData, uncompressedSize)) {
 			std::cerr << "Failed to decompress single block file: " << in->filename << std::endl;
 			return false;
 		}
@@ -288,10 +310,13 @@ struct R_Worker : ff_minode_t<Task> {
 			return false;
 		}
 
-		outFile.write(reinterpret_cast<char*>(uncompressedData.data()), uncompressedSize);
+		outFile.write(reinterpret_cast<char*>(uncompressedData), uncompressedSize);
 		if (REMOVE_ORIGIN) {
             	unlink(in->filename.c_str());
         }
+
+		delete[] uncompressedData;
+		//delete[] compressedData;
 		cleanupTask(in);
 		outFile.close();
 
@@ -317,8 +342,16 @@ struct R_Worker : ff_minode_t<Task> {
         }
 
         // Write a header indicating it's a single block file
-        size_t header = 0; // 0 indicates a single block
+        size_t header = 1; // 1 indicates a single block
         outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
+		//save the compressed size
+		size_t cmp_size = in->cmp_size;
+		outFile.write(reinterpret_cast<const char*>(&cmp_size), sizeof(cmp_size));
+		//save the last block size
+		size_t lastBlock = in->lastBlock;
+		outFile.write(reinterpret_cast<const char*>(&lastBlock), sizeof(lastBlock));
+
+		std::cout << "Header values: " << header << ", " << cmp_size << ", " << lastBlock << std::endl;
 
         // Write the compressed data
         outFile.write(reinterpret_cast<const char*>(in->ptrOut), in->cmp_size);
@@ -492,6 +525,10 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	if (VERBOSE){
+		std::cout << "Number of L-Workers: " << lworkers << std::endl;
+		std::cout << "Number of R-Workers: " << rworkers << std::endl;
+	}
 	const size_t Lw = lworkers;
     const size_t Rw = rworkers;
 

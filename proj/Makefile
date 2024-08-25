@@ -13,12 +13,9 @@ CXXFLAGS  	+= -Wall -DNO_DEFAULT_MAPPING -DBLOCKING_MODE -DFF_BOUNDED_BUFFER
 LDFLAGS 	= -pthread
 OPTFLAGS	= -O3 -ffast-math -DNDEBUG
 
-TARGETS		= compdecomp \
-		  ffc_farm \
-		  mainff \
-		  mainffa2a \
-		  mainseq \
-		  mainmpi
+TARGETS		= 	mainffa2a \
+		  		mainseq \
+		  		mainmpi
 
 .PHONY: all clean cleanall
 .SUFFIXES: .cpp 
@@ -29,17 +26,21 @@ TARGETS		= compdecomp \
 
 all		: $(TARGETS)
 
-mainseq	: mainseq.cpp utility.hpp
+mainseq	: mainseq.cpp cmdline.hpp utility.hpp
 	$(CXX) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c
 
-mainff       : mainff.cpp utility.hpp cmdline.hpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
+#mainff       : mainff.cpp utility.hpp cmdline.hpp
+#	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
 mainffa2a       : mainffa2a.cpp utility.hpp cmdlinea2a.hpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -I$(FF_ROOT) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
 mainmpi      : mainmpi.cpp utilitympi.hpp cmdlinempi.hpp
 	$(CXXMPI) $(CXXFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
+
+mainmpistatus      : mainmpistatus.cpp utilitympi.hpp cmdlinempi.hpp
+	$(CXXMPI) $(CXXFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
+
 
 
 clean		: 
