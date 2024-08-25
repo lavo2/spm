@@ -342,7 +342,7 @@ int main(int argc, char* argv[]) {
     }else{  // process 0 comprime processa i suoi dati e li salva, 
             //poi riceve i dati compressi dagli altri processi e li salva
 
-        std::vector<DataRec> allData;
+        /*std::vector<DataRec> allData;
         for (int i = 0; i < bcastData.sendCounts[0]; ++i) {
             //std::cout << "Process " << myrank << " received data for file " << recvBuffer[i].filename << ": ";
 
@@ -351,7 +351,7 @@ int main(int argc, char* argv[]) {
             unsigned char *ptrOut = nullptr;
             unsigned char *ptrIn = nullptr;
 
-            /* process data MAIN PROCESS */
+
             if (comp){
                 // get an estimation of the maximum compression size
                 cmp_len = compressBound(inSize);
@@ -401,12 +401,8 @@ int main(int argc, char* argv[]) {
             dr.nblock = recvBuffer[i].nblock;
             allData.push_back(dr);
 
-            /*
-            delete[] ptrIn;
-            delete[] ptrOut;
-            */
 
-            /* se ho tutto il file allora lo scrivo e rimuovo da alldata*/
+            
             if (dr.blockid ==   dr.nblock){
                 size_t lastblocksize = recvBuffer[i].lastblocksize;
                 if (comp){   
@@ -426,7 +422,7 @@ int main(int argc, char* argv[]) {
                 }
                 allData.clear();
             }
-        }
+        }*/
 
 
         std::vector<unsigned char*> recDataVec;
@@ -505,7 +501,6 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-        std::cout<<"arrivo qui 4"<<std::endl;
 
         //sort allData by blockid
         /*std::sort(allData.begin(), allData.end(), [](const DataRec& a, const DataRec& b) {

@@ -351,7 +351,7 @@ struct R_Worker : ff_minode_t<Task> {
 		size_t lastBlock = in->lastBlock;
 		outFile.write(reinterpret_cast<const char*>(&lastBlock), sizeof(lastBlock));
 
-		std::cout << "Header values: " << header << ", " << cmp_size << ", " << lastBlock << std::endl;
+		//std::cout << "Header values: " << header << ", " << cmp_size << ", " << lastBlock << std::endl;
 
         // Write the compressed data
         outFile.write(reinterpret_cast<const char*>(in->ptrOut), in->cmp_size);

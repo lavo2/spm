@@ -15,7 +15,8 @@ OPTFLAGS	= -O3 -ffast-math -DNDEBUG
 
 TARGETS		= 	mainffa2a \
 		  		mainseq \
-		  		mainmpi
+		  		mainmpi \
+				mainmpirr
 
 .PHONY: all clean cleanall
 .SUFFIXES: .cpp 
@@ -38,7 +39,7 @@ mainffa2a       : mainffa2a.cpp utility.hpp cmdlinea2a.hpp
 mainmpi      : mainmpi.cpp utilitympi.hpp cmdlinempi.hpp
 	$(CXXMPI) $(CXXFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
-mainmpistatus      : mainmpistatus.cpp utilitympi.hpp cmdlinempi.hpp
+mainmpirr      : mainmpirr.cpp utilitympi.hpp cmdlinempi.hpp
 	$(CXXMPI) $(CXXFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< ./miniz/miniz.c $(LDFLAGS)
 
 
