@@ -27,7 +27,7 @@ def generate_dataset(directory, sizes_in_kb):
 # Main function to define sizes and call the generation functions
 def main():
     # Sizes in KB (for 1GB use 1024 * 1024 KB)
-    sizes_in_kb = [1, 10, 50, 100, 500, 1024, 5*1024, 10*1024, 50*1024, 100*1024, 500*1024, 1024*1024]
+    sizes_in_kb = [1 * 1024, 2* 1024, 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024, 64 * 1024, 128 * 1024, 256 * 1024]
     
     # Directory to save the dataset
     directory = "text_files_dataset"
