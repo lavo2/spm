@@ -197,68 +197,58 @@ int main(int argc, char* argv[]) {
     //store all the data untill all processes finish
     std::vector<unsigned char*> myDataVec(bcastData.sendCounts[myrank]);
 
-    if (myrank){
-
+    if (myrank) {
         unsigned char* myData = nullptr;
+        std::vector<unsigned char*> dataVec(bcastData.sendCounts[myrank]); // Temporary storage for received data
 
+        // First loop: Receive the data
         for (int i = 0; i < bcastData.sendCounts[myrank]; ++i) {
             /*std::cout << "Process " << myrank << " will receive data for file " << recvBuffer[i].filename <<
             ", Size: " << recvBuffer[i].size << " bytes" << std::endl;*/
+            
             myData = new unsigned char[recvBuffer[i].size];
             MPI_Recv(myData, recvBuffer[i].size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            /*
-            // Print the first 10 bytes of each file's data for debugging
-            std::cout << "Process " << myrank << " received data for file " << recvBuffer[i].filename << ": ";
-            for (int j = 0; j < std::min<size_t>(10, recvBuffer[i].size); ++j) {
-                std::cout << (myData[j]) << " ";
-            }
-            std::cout << std::endl;
+            dataVec[i] = myData;  // Store the received data for later processing
+        }
 
-            */
-
-            /* modify data as needed */
-            /*unsigned char* myDataWithHeader = new unsigned char[recvBuffer[i].size + sizeof(int)];
-            std::memcpy(myDataWithHeader, &myrank, sizeof(int));
-            std::memcpy(myDataWithHeader + sizeof(int), myData, recvBuffer[i].size);*/
-            //unsigned char * inPtr = myData;	
-            size_t inSize= recvBuffer[i].size;
+        // Second loop: Process the received data
+        for (int i = 0; i < bcastData.sendCounts[myrank]; ++i) {
+            size_t inSize = recvBuffer[i].size;
             size_t cmp_len = 0;
-            unsigned char *ptrOut = nullptr;
-            if(comp){
-                // get an estimation of the maximum compression size
+            unsigned char* ptrOut = nullptr;
+            
+            if (comp) {
+                // Compression
                 cmp_len = compressBound(inSize);
-                // allocate memory to store compressed data in memory
                 ptrOut = new unsigned char[cmp_len];
                 int err;
-                if ((err = compress(ptrOut, &cmp_len, (const unsigned char *)myData, inSize)) != Z_OK) {
-                    if (QUITE_MODE>=1) {
-                        std::cerr << "process"<< myrank<<"Failed to compress block, error: " << err << std::endl;
+                if ((err = compress(ptrOut, &cmp_len, (const unsigned char*)dataVec[i], inSize)) != Z_OK) {
+                    if (QUITE_MODE >= 1) {
+                        std::cerr << "Process " << myrank << " failed to compress block, error: " << err << std::endl;
                     }
-                    //success = false;
                     delete[] ptrOut;
-                    delete[] myData;
+                    delete[] dataVec[i];
                     MPI_Abort(MPI_COMM_WORLD, -1);
                 }
-                //std::cout << "Process " << myrank << " compressed file: " << recvBuffer[i].filename<<std::endl;
-            }
-            else{
+            } else {
+                // Decompression
                 cmp_len = BIGFILE_LOW_THRESHOLD;
                 ptrOut = new unsigned char[cmp_len];
-                // Decompress
                 int err;
-                if ((err = uncompress(ptrOut, &cmp_len, (const unsigned char *)myData, inSize)) != Z_OK) {
-                    std::cerr << "process"<< myrank<<"Failed to decompress block, error: " << err << std::endl;
+                if ((err = uncompress(ptrOut, &cmp_len, (const unsigned char*)dataVec[i], inSize)) != Z_OK) {
+                    std::cerr << "Process " << myrank << " failed to decompress block, error: " << err << std::endl;
                     delete[] ptrOut;
-                    delete[] myData;
+                    delete[] dataVec[i];
                     MPI_Abort(MPI_COMM_WORLD, -1);
                 }
-
             }
+            
             myDataVec[i] = ptrOut;
             recvBuffer[i].size = cmp_len;
-            delete[] myData;
+            delete[] dataVec[i];  // Free the memory of the original data after processing
         }
     }
+
         
 
     // Sending the file data to workers

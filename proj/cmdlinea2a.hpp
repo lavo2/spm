@@ -65,7 +65,7 @@ int parseCommandLine(int argc, char *argv[]) {
             }
 
             // Set the minimum threshold to 2 MB
-            t = std::max(2L, t);
+            printf("t: %ld\n", t);
 
             BIGFILE_LOW_THRESHOLD = t * (1024 * 1024);  // Convert MB to bytes
 
