@@ -52,6 +52,10 @@ struct Task {
 struct L_Worker : ff::ff_monode_t<Task> {
     L_Worker(const std::vector<FileData>& group) : group(group) {}
 
+
+	/* The function will check if the file is a large file.
+	   * if not, it will send the file to the next stage
+	   * if it is, it will partition the file and send the partitions to the next stage */ 
 	bool doWorkCompress(unsigned char *ptr, size_t size, const std::string &fname) {
 		if (size<= BIGFILE_LOW_THRESHOLD) {
 			/* if a file is smaller than the threshold it does not need partitioning */
@@ -84,6 +88,8 @@ struct L_Worker : ff::ff_monode_t<Task> {
 		return true;
     }
 
+
+	/* The same as before but the partitioning will be done according to the header informations. */
 	bool doWorkDecompress(unsigned char *ptr, size_t size, const std::string &fname) {
 		
 		// Read the header to determine if it's a single block or multi-block file
@@ -147,8 +153,6 @@ struct L_Worker : ff::ff_monode_t<Task> {
 	/* Task for the Left Workers */
      
     Task *svc(Task *task) {
-
-        //const int nw = get_num_outchannels(); // gets the total number of workers added to the farm
 
 		// for each file assigned to this worker
         for (size_t i = 0; i < group.size(); ++i) {
@@ -364,9 +368,9 @@ struct R_Worker : ff_minode_t<Task> {
 };
 
 
+
 //--------------------------------------------------------------------
 // Merger: reassemble the compressed/decompressed files
-
 
 struct Merger : ff_minode_t<Task> {
     Merger(size_t Rw) : Rw(Rw) {
@@ -374,30 +378,36 @@ struct Merger : ff_minode_t<Task> {
     }
 
     Task* svc(Task* in) override {
-        //std::cout << "Merger, current worker: " << get_my_id() << " Filename: " << in->filename 
-                  //<< " Block: " << in->blockid << std::endl;
-
-
+		// the worker will receive the blocks in the order they were sent
+		// the blocks are stored in a map, when all the blocks are received
+		// the blocks are reassembled in the correct order
 		handleMultiBlock(in);
-		// print to use the Rw variable or it gives a warning
+		// print just to use the Rw variable or it gives a warning
 		if (in->filename == "_warning_") {
 			std::cerr << "Error in Merger, R-workers: " << Rw << std::endl;
 		}
         return GO_ON;
     }
 
+	// FileMerger is a vector where we will store the recevied blocks, for each file.
 private:
     struct FileMerger {
         std::vector<Partition> partitions;
     };
-
+	// we will use a map to manage the different files.
     std::unordered_map<std::string, FileMerger> fileMergers; // Keyed by filename
 
 
+	/* The function is the same for both compression and decompression
+	 * The function will handle the blocks of a multi-block file
+	 * When all the blocks are received, the corresponding function
+	 * for compression or decompression will be called
+	*/
     void handleMultiBlock(Task* in) {
         auto& fileMerger = fileMergers[in->filename];
 		// note for decompression the in->cmp_size is the maximum size of the block BIGFILE_LOW_THRESHOLD
         fileMerger.partitions.push_back({in->blockid, in->ptrOut, in->cmp_size, in->size});
+		// for the received file, if i have all the blocks, I can merge them
         if (fileMerger.partitions.size() == in->nblocks) {
 			if (VERBOSE) std::cout << "Merging file: " << in->filename << std::endl;
             if(comp){
@@ -417,6 +427,8 @@ private:
         delete in; // Cleanup task
     }
 
+	// The function will reassemble the compressed blocks of a multi-block file
+	// and write the compressed data to the output file
     void regroupAndWrite(const std::string &outputFilename, FileMerger& fileMerger) {
 		std::ofstream outFile(outputFilename, std::ios::binary);
 		if (!outFile.is_open()) {
@@ -424,11 +436,14 @@ private:
 			return;
 		}
 
+		// sort the blocks
 		std::sort(fileMerger.partitions.begin(), fileMerger.partitions.end(),
 				[](const Partition& a, const Partition& b) {
 					return a.npart < b.npart;
 				});
 
+		// Write the decompressed data of each block, in order.
+		// note that the blocks received are already cleaned from the header
 		for (const auto& part : fileMerger.partitions) {
 			outFile.write(reinterpret_cast<const char*>(part.ptr), part.size_part);
 			delete[] part.ptr;  // Clean up memory after use
@@ -437,8 +452,6 @@ private:
 	}
 
 	void regroupAndZip(const std::string &outputFilename, FileMerger& fileMerger) {
-		//print the output file
-		//std::cout << "Output file: " << outputFilename << std::endl;
         std::ofstream outFile(outputFilename, std::ios::binary);
         if (!outFile.is_open()) {
             std::cerr << "Failed to open output file: " << outputFilename << std::endl;
@@ -461,8 +474,10 @@ private:
         	outFile.write(reinterpret_cast<const char*>(&partSize), sizeof(partSize));
     	}
 
+		// write the size of the last block uncompressed
 		size_t lastBlock = static_cast<size_t>(fileMerger.partitions[fileMerger.partitions.size() - 1].size_uncompressed);
 		outFile.write(reinterpret_cast<const char*>(&lastBlock), sizeof(lastBlock));
+
 		// Write the compressed data of each block
         for (const auto& part : fileMerger.partitions) {
             outFile.write(reinterpret_cast<const char*>(part.ptr), part.size_part);
