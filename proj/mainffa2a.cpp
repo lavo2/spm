@@ -116,16 +116,17 @@ struct L_Worker : ff::ff_monode_t<Task> {
 			size_t headerSize = sizeof(header) + numBlocks * sizeof(size_t) + sizeof(lastBlock);
 
 			//now we have the information to read the data
-			size_t currentPos = 0;
+			size_t currentPos = 0; // this keeps track of the current position of the header
+
+			// Read the compressed data of each block
 			for (size_t i = 0; i < numBlocks; ++i) {
-				// Read the compressed data of each block
+				
 				size_t blockSize = blockSizes[i];
 				unsigned char *blockDataPtr = new unsigned char[blockSize];
-				
+				// for retrieving the data we have to consider the offset of the header
 				memcpy(blockDataPtr, ptr + headerSize + currentPos, blockSize);
 				currentPos += blockSize;
 				
-
 				Task *t = new Task(blockDataPtr, blockSize, fname);
 				t->blockid = i + 1;
 				t->nblocks = numBlocks;
@@ -137,7 +138,6 @@ struct L_Worker : ff::ff_monode_t<Task> {
 			}
 
 			// CHECK since i send copy of the datablock I should be able to delete the original one
-			//delete[] ptr;
 			return true;
 		}
 		std::cerr << "Error with the header during decompression" << std::endl;
@@ -184,10 +184,7 @@ struct R_Worker : ff_minode_t<Task> {
 
     Task *svc(Task *in) {
         
-       // std::cout << "R_Worker, current worker: " << get_my_id() << " Filename: " << in->filename << std::endl;
-
 		if (comp) {
-			//std::cout << "Compressing file: " << in->filename << std::endl;
 			//--------------compression
 			unsigned char * inPtr = in->ptr;	
 			size_t          inSize= in->size;
@@ -202,8 +199,7 @@ struct R_Worker : ff_minode_t<Task> {
 				delete in;
 				return GO_ON;
 			}
-
-
+			//cmp_len now has the real size of the compressed data
 			in->ptrOut   = ptrOut;
 			in->cmp_size = cmp_len;
 			bool oneblockfile = (in->nblocks == 1);
@@ -214,7 +210,7 @@ struct R_Worker : ff_minode_t<Task> {
 					delete in;
 					return GO_ON;
 				}
-
+			// multi-block files are sent to the merger
 			} else {
 				ff_send_out(in);
 			}
@@ -222,6 +218,7 @@ struct R_Worker : ff_minode_t<Task> {
 
 		}
 		//--------------decompression
+		// to refactor to use the same style as the compression for clarity
 		else{
 			if (in->isSingleBlock) {
 				if(VERBOSE) std::cout << "Decompressing single block file: " << in->filename << std::endl;
@@ -232,10 +229,10 @@ struct R_Worker : ff_minode_t<Task> {
 					return GO_ON;
 				}
 			} else {
-				//std::cout << "Decompressing multi-block file: " << in->filename << std::endl;
-				
-				// If it is the last block, use the lastBlock size
+				// Decompress a multi-block file		
+				// if it is not the last block, the size is BIGFILE_LOW_THRESHOLD		
 				unsigned long decmp_len = BIGFILE_LOW_THRESHOLD; // block upper bound
+				// If it is the last block, use the lastBlock size
 				if (in->lastBlock){
 					decmp_len = in->lastBlock;
 				}
@@ -246,9 +243,9 @@ struct R_Worker : ff_minode_t<Task> {
 					delete in;
 					return GO_ON;
 				}
-				//std::cout << "Decompressed block: " << in->blockid << " of file: " << in->filename << std::endl;
 				in->cmp_size = decmp_len;
 				in->ptrOut = ptrOut;
+				//to the merger since it is a multi-block file
 				ff_send_out(in);
 			}
 			return GO_ON;
@@ -257,44 +254,26 @@ struct R_Worker : ff_minode_t<Task> {
 		return GO_ON;
 	}
 
+	/* Decompress a single block file, write the decompressed data to the output file
+	 * the data in input consists in the compressed data and the header.
+	 * For single block files the header is composed of three 8-byte values:
+	 * 1. A value of 1 to indicate it's a single block file
+	 * 2. The size of the compressed data
+	 * 3. The size of the uncompressed data */
+	
 	bool decompressSingleBlock(Task* in) {
 
-    // Read the first three 8-byte values from the beginning of the file
+    	// Read the first three 8-byte values from the beginning of the file
     	size_t* header = reinterpret_cast<size_t*>(in->ptr);
-    	//size_t value1 = header[0];
-    	//size_t value2 = header[1];
+		// get the size of the compressed data
     	size_t uncompressedSize = header[2];
 
-		//std::cout << "Header values: " << value1 << ", " << value2 << ", " << uncompressedSize << std::endl;
-
-		/*
-		std::ifstream inFile(in->filename, std::ios::binary);
-		if (!inFile.is_open()) {
-			std::cerr << "Failed to open input file: " << in->filename << std::endl;
-			return false;
-		}
-
-		// Read the entire file into memory
-		inFile.seekg(0, std::ios::end);
-		size_t fileSize = inFile.tellg();
-		inFile.seekg(sizeof(size_t)*3, std::ios::beg);  // Skip the header byte
-
-		*/
+		// Prepare buffer for decompression
 		size_t compressedSize = in->size - (3 * sizeof(size_t));  // Exclude the header byte
+		// save the data without the header
 		unsigned char* compressedData = in->ptr + (3 * sizeof(size_t));
-
+		// prepare the buffer for the decompressed data
 		unsigned char* uncompressedData = new unsigned char[uncompressedSize];
-
-
-		/*std::vector<unsigned char> compressedData(compressedSize);
-		inFile.read(reinterpret_cast<char*>(compressedData.data()), compressedSize);
-		inFile.close();*/
-
-		// Prepare buffer for decompression (estimate size needed)
-		// smallest beetwen 2*compressedSize and BIGFILE_LOW_THRESHOLD
-		//size_t uncompressedSize = std::min(compressedSize * 2, BIGFILE_LOW_THRESHOLD);
-		//std::vector<unsigned char> uncompressedData(uncompressedSize);
-
 		// Decompress
 		if (!decompressBlock(compressedData, compressedSize, uncompressedData, uncompressedSize)) {
 			std::cerr << "Failed to decompress single block file: " << in->filename << std::endl;
@@ -305,24 +284,27 @@ struct R_Worker : ff_minode_t<Task> {
 		// Remove the ".zip" suffix
 		std::string outputFile = in->filename.substr(0, in->filename.size() - 4);
 		std::ofstream outFile(outputFile, std::ios::binary);
+
 		if (!outFile.is_open()) {
 			std::cerr << "Failed to open output file: " << outputFile << std::endl;
 			return false;
 		}
 
+		// Write the decompressed data to the output file
 		outFile.write(reinterpret_cast<char*>(uncompressedData), uncompressedSize);
 		if (REMOVE_ORIGIN) {
             	unlink(in->filename.c_str());
         }
 
 		delete[] uncompressedData;
-		//delete[] compressedData;
+		delete[] compressedData;
 		cleanupTask(in);
 		outFile.close();
 
 		return true;
 	}
 
+	// Decompress a block of data
 	bool decompressBlock(unsigned char* input, size_t inputSize, unsigned char* output, size_t& outputSize) {
 		int err;
 		if ((err = uncompress(output, &outputSize, input, inputSize)) != Z_OK) {
@@ -332,8 +314,16 @@ struct R_Worker : ff_minode_t<Task> {
 		return true;
 	}
 
+	/* Handle a single block file, write the compressed data to the output file
+	 * The data in input consists in the file's stream of data.
+	 * we have to add a header to the file to indicate that it is a single block file
+	 * with information about:
+	 * 1. Number of blocks (1 in this case)
+	 * 2. Compressed size of each block (1 in this case)
+	 * 3. Last block uncompressed size */
 
 	bool handleSingleBlock(Task* in) {
+		// add .zip to the output file
         std::string outfile = in->filename + SUFFIX;
         std::ofstream outFile(outfile, std::ios::binary);
         if (!outFile.is_open()) {
@@ -350,13 +340,9 @@ struct R_Worker : ff_minode_t<Task> {
 		//save the last block size
 		size_t lastBlock = in->lastBlock;
 		outFile.write(reinterpret_cast<const char*>(&lastBlock), sizeof(lastBlock));
-
-		//std::cout << "Header values: " << header << ", " << cmp_size << ", " << lastBlock << std::endl;
-
         // Write the compressed data
         outFile.write(reinterpret_cast<const char*>(in->ptrOut), in->cmp_size);
 		
-
         if (REMOVE_ORIGIN) {
             unlink(in->filename.c_str());
         }
