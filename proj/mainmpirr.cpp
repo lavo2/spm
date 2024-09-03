@@ -114,8 +114,7 @@ int main(int argc, char* argv[]) {
                         fileDataTestVec.push_back(fdt);
                         offset += blockSizes[i];
                     }
-                }else{
-                    //std::cout << "File: " << fileDataVec[i].filename << ", Size: " << fileDataVec[i].size << " bytes" << std::endl;
+                }else{ //compression
                     if (fileDataVec[f].size > BIGFILE_LOW_THRESHOLD) {
                         // File is large; split into blocks
                         const size_t filesize = fileDataVec[f].size;
@@ -129,7 +128,6 @@ int main(int argc, char* argv[]) {
                             //null-termination
                             fdt.filename[sizeof(fdt.filename) - 1] = '\0';
 
-
                             fdt.size = BIGFILE_LOW_THRESHOLD;
                             fdt.nblock = fullblocks+(partialblock>0);
                             fdt.blockid = i+1;
@@ -139,7 +137,6 @@ int main(int argc, char* argv[]) {
                         }
                         if (partialblock) {
                             FileData_test fdt;
-                            //std::strncpy(fdt.filename, fileDataVec[f].filename, sizeof(fdt.filename));
                             std::memcpy(fdt.filename, fileDataVec[f].filename, sizeof(fdt.filename) - 1);
                             fdt.filename[sizeof(fdt.filename) - 1] = '\0';
                             fdt.size = partialblock;
@@ -162,13 +159,16 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
-            // print fileDataTestVec
         } else {
             std::cerr << "Error processing files in directory." << std::endl;
             MPI_Abort(MPI_COMM_WORLD, -1);
         }
         bcastData.numFiles = fileDataTestVec.size();
     }
+
+    /* first difference from the previous version:
+    * now we have to exclude the main process from the total number of processes
+    * when distributing the files among the processes */
 
     // Total number of processes excluding process 0
     int totalProcesses = size - 1;
@@ -190,18 +190,12 @@ int main(int argc, char* argv[]) {
         bcastData.displs[i] = offset;
         offset += bcastData.sendCounts[i];
     }
-
-    //std::cout<<"numFiles: "<<bcastData.numFiles<<std::endl;
     // Process 0 gets no data, so its sendCounts and displs remain zero.
     MPI_Datatype iHeaderDataType = createIHeaderDataType(size);
 
     //bdacst the information needed to all the processes (inclusing process 0)
     MPI_Bcast(&bcastData, 1, iHeaderDataType, 0, MPI_COMM_WORLD);
     if(VERBOSE) std::cout << "Process " << myrank << " will receive " << bcastData.sendCounts[myrank] << " files." << std::endl;
-    //std::cout<<"process "<<myrank<<" total files: "<<bcastData.numFiles<<std::endl;
-
-    //numFiles = bcastData.numFiles;
-
 
     // now everyone knows how many files they will receive
     //and can allocate the necessary memory
@@ -214,20 +208,16 @@ int main(int argc, char* argv[]) {
     MPI_Scatterv(fileDataTestVec.data(), bcastData.sendCounts, bcastData.displs, fileDataType,
                  recvBuffer.data(), bcastData.sendCounts[myrank], fileDataType, 0, MPI_COMM_WORLD);
 
-    //std::cout << "Process " << myrank << " received " << bcastData.sendCounts[myrank] << " files." << std::endl;
-
     //store all the data untill all processes finish
     std::vector<unsigned char*> myDataVec(bcastData.sendCounts[myrank]);
 
-    if (myrank){
+    if (myrank){ // Workers
 
-           unsigned char* myData = nullptr;
+        unsigned char* myData = nullptr;
         std::vector<unsigned char*> dataVec(bcastData.sendCounts[myrank]); // Temporary storage for received data
 
         // First loop: Receive the data
         for (int i = 0; i < bcastData.sendCounts[myrank]; ++i) {
-            /*std::cout << "Process " << myrank << " will receive data for file " << recvBuffer[i].filename <<
-            ", Size: " << recvBuffer[i].size << " bytes" << std::endl;*/
             
             myData = new unsigned char[recvBuffer[i].size];
             MPI_Recv(myData, recvBuffer[i].size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -282,18 +272,12 @@ int main(int argc, char* argv[]) {
                     // make a copy of the data to send
                     unsigned char* sendData = new unsigned char[fileDataTestVec[j].size];
                     std::memcpy(sendData, fileDataVec[fileDataTestVec[j].fileIndex].data.data() + ((fileDataTestVec[j].blockid-1) * BIGFILE_LOW_THRESHOLD), fileDataTestVec[j].size);
-
-                /* std::cout << "Process " << myrank << " sending data for file " << fileDataTestVec[j].filename <<
-                    ", Size: " << fileDataTestVec[j].size << " bytes" <<
-                    " nblock: " << fileDataTestVec[j].nblock << " blockid: " << fileDataTestVec[j].blockid <<
-                    " starting from " << ((fileDataTestVec[j].blockid-1) * BIGFILE_LOW_THRESHOLD) << std::endl;*/
                     
                     MPI_Send(sendData, 
                             fileDataTestVec[j].size, MPI_UNSIGNED_CHAR, i, 0, MPI_COMM_WORLD);
                     
                 delete[] sendData;
                 }else{
-
                     unsigned char* sendData = new unsigned char[fileDataTestVec[j].size];
                     size_t offset = fileDataTestVec[j].offset;
                     std::memcpy(sendData, fileDataVec[fileDataTestVec[j].fileIndex].data.data() + offset, fileDataTestVec[j].size);
@@ -304,21 +288,9 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-        
-    
-
-
-
-    /*for (const auto& fileData : recvBuffer) {
-        std::cout << "Process " << myrank << " received file: " << fileData.filename 
-                  << ", Size: " << fileData.size << " bytes" << std::endl;
-    }*/
-
-    
 
     MPI_Gatherv(recvBuffer.data(), bcastData.sendCounts[myrank], fileDataType,
                 fileDataTestVec.data(), bcastData.sendCounts, bcastData.displs, fileDataType, 0, MPI_COMM_WORLD);
-
 
 
     if(myrank){
@@ -327,93 +299,17 @@ int main(int argc, char* argv[]) {
             MPI_Send(myDataVec[i], recvBuffer[i].size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
             delete[] myDataVec[i];
         }
-    }else{  // process 0 comprime processa i suoi dati e li salva, 
-            //poi riceve i dati compressi dagli altri processi e li salva
-
-        /*std::vector<DataRec> allData;
-        for (int i = 0; i < bcastData.sendCounts[0]; ++i) {
-            //std::cout << "Process " << myrank << " received data for file " << recvBuffer[i].filename << ": ";
-
-            size_t inSize = recvBuffer[i].size;
-            size_t cmp_len = 0;
-            unsigned char *ptrOut = nullptr;
-            unsigned char *ptrIn = nullptr;
-
-
-            if (comp){
-                // get an estimation of the maximum compression size
-                cmp_len = compressBound(inSize);
-                // allocate memory to store compressed data in memory
-                ptrOut = new unsigned char[cmp_len];
-                ptrIn = new unsigned char[inSize];
-                int err;
-
-                //TODO: SPIEGARE BENE QUESTO PEZZO
-                memcpy(ptrIn, fileDataVec[fileDataTestVec[bcastData.displs[0] + i].fileIndex].data.data() + ((fileDataTestVec[bcastData.displs[0] + i].blockid-1) * BIGFILE_LOW_THRESHOLD), inSize);
-                if((err = compress(ptrOut, &cmp_len, ptrIn, inSize)) != Z_OK) {
-                    std::cerr << "process"<< myrank<<"Failed to compress block, error: " << err << std::endl;
-                    delete [] ptrOut;
-                    delete [] ptrIn;
-                    MPI_Abort(MPI_COMM_WORLD, -1);
-
-                }
-                //std::cout << "Process " << myrank << " compressed file: " << recvBuffer[i].filename<<std::endl;
-            }
-            else{
-                
-                bool islastblock = fileDataTestVec[bcastData.displs[0] + i].blockid == fileDataTestVec[bcastData.displs[0] + i].nblock;
-                cmp_len = islastblock ? fileDataTestVec[bcastData.displs[0] + i].lastblocksize : BIGFILE_LOW_THRESHOLD;
-		        ptrOut = new unsigned char[cmp_len];
-                ptrIn = new unsigned char[inSize];
-
-                memcpy(ptrIn, fileDataVec[fileDataTestVec[bcastData.displs[0] + i].fileIndex].data.data() + fileDataTestVec[bcastData.displs[0] + i].offset, inSize);
-                // Decompress
-                int err;
-		        if ((err = uncompress(ptrOut, &cmp_len, ptrIn, inSize)) != Z_OK) {
-                    std::cerr << "process"<< myrank<<"Failed to decompress block, error: " << err << std::endl;
-			        MPI_Abort(MPI_COMM_WORLD, -1);
-		        }
-            }
-            myDataVec[i] = ptrOut;
-            recvBuffer[i].size = cmp_len;
-            fileDataTestVec[bcastData.displs[0] + i].size = cmp_len;
-            //fileDataVec[bcastData.displs[0] + i].data.clear();
-            DataRec dr;
-            std::memcpy(dr.filename, recvBuffer[i].filename, sizeof(dr.filename));
-            dr.filename[sizeof(dr.filename) - 1] = '\0';
-
-            //std::strncpy(dr.filename, recvBuffer[i].filename, sizeof(dr.filename));
-            dr.size = recvBuffer[i].size;
-            dr.recDataVec.push_back(ptrOut);
-            dr.blockid = recvBuffer[i].blockid;
-            dr.nblock = recvBuffer[i].nblock;
-            allData.push_back(dr);
-
-
-            
-            if (dr.blockid ==   dr.nblock){
-                size_t lastblocksize = recvBuffer[i].lastblocksize;
-                if (comp){   
-                    if(mergeAndZip(allData, lastblocksize)){
-                        if(VERBOSE) std::cout << "File " << dr.filename << " merged and zipped successfully." << std::endl;
-                    } else {
-                        std::cerr << "Error merging and zipping file: " << dr.filename << std::endl;
-                        MPI_Abort(MPI_COMM_WORLD, -1);
-                    }
-                }else{
-                    if(mergeAndWrite(allData)){
-                        if(VERBOSE) std::cout << "File " << dr.filename << " merged and written successfully." << std::endl;
-                    } else {
-                        std::cerr << "Error merging and writing file: " << dr.filename << std::endl;
-                        MPI_Abort(MPI_COMM_WORLD, -1);
-                    }
-                }
-                allData.clear();
-            }
-        }*/
-
-
+    }else{  // Main process
         std::vector<unsigned char*> recDataVec;
+        /*
+        second difference from the previous version:
+        * instead of storing all the data in a single vector, we store the data in a map
+        * the key is the filename and the value is a vector of DataRec objects
+        * this way we can easily sort the blocks by blockid and process them
+        * this is done to use the blocking receive one block for each process
+        * instead of receiving all the blocks from a single process like before.
+        * after some tests the gain is not significant in this case
+        */
         // Map from filename to a vector of DataRec objects (one per block)
         std::unordered_map<std::string, std::vector<DataRec>> allDataMap;
 
@@ -433,17 +329,13 @@ int main(int argc, char* argv[]) {
                     
                     // Receive the data from process 'i'
                     MPI_Recv(myDataMain, dataSize, MPI_UNSIGNED_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                    /*std::cout << "Process " << myrank << " received data for file " << fileDataTestVec[bcastData.displs[i] + j].filename <<
-                    ", Size: " << dataSize << " bytes"
-                    << " nblock: " << fileDataTestVec[bcastData.displs[i] + j].nblock << " blockid: " << fileDataTestVec[bcastData.displs[i] + j].blockid << std::endl;*/
-
+                    
                     // Retrieve the filename from the incoming data
                     std::string filename = fileDataTestVec[bcastData.displs[i] + j].filename;
 
                     // Create a new DataRec object for this block
                     DataRec dr;
 
-                    //std::strncpy(dr.filename, filename.c_str(), sizeof(dr.filename));
                     std::memcpy(dr.filename, filename.c_str(), sizeof(dr.filename));
                     dr.filename[sizeof(dr.filename) - 1] = '\0';
 
@@ -493,29 +385,7 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-
-        //sort allData by blockid
-        /*std::sort(allData.begin(), allData.end(), [](const DataRec& a, const DataRec& b) {
-            return a.blockid < b.blockid;
-        });*/
-
-        
-
-        
-
-    //print allData
-    /*for (const auto& dr : allData) {
-        std::cout << "File: " << dr.filename << ", Size: " << dr.size << " bytes" 
-                    << " blockid: " << dr.blockid << " nblock: " << dr.nblock << std::endl;
-    }*/
-    
-    // print dr
-    
-    /*
-    for (int i = 0; i < fileDataVec.size(); ++i) {
-        std::cout << "File: " << fileDataVec[i].filename << ", Size: " << fileDataVec[i].size << " bytes" <<
-        " lenght of data: " << fileDataVec[i].data.size() << std::endl;
-    }*/
+        // Free the memory of the received data
         for (long unsigned int i = 0; i < recDataVec.size(); ++i) {
             delete[] recDataVec[i];
         }
@@ -528,10 +398,6 @@ int main(int argc, char* argv[]) {
         //print int milliseconds
         std::cout << "Elapsed time: " << (end_time - start_time) * 1000 << " milliseconds." << std::endl;
 
-        //std::cout << "Elapsed time: " << end_time - start_time << " seconds." << std::endl;
-        /*for (const auto& fileData : fileDataTestVec) {
-            std::cout << "File: " << fileData.filename << ", Size: " << fileData.size << " bytes" << std::endl;
-        }*/
     }
 
     MPI_Type_free(&fileDataType);
