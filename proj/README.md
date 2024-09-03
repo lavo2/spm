@@ -4,7 +4,7 @@ Project for the SPM course @UniPi - Master degree in CS, AI Curricula
 
 ## Overview
 
-The project contains 4 version of the second project's task. The sequential version `mainseq.cpp`, the FastFlow version with the given constraint `mainffa2a.cpp`, an MPI version where the main process act as a worker `mainmpi.cpp`, another MPI version with a farm-like structure `mainmpirr.cpp`
+The project contains 4 version of the second project's task. The sequential version `mainseq.cpp`, the FastFlow version with the given constraint `mainffa2a.cpp`, an MPI version where the main process act as a worker `mainmpi.cpp` and a second MPI version with a farm-like structure `mainmpirr.cpp`.
 
 
 # project Structure
@@ -32,6 +32,56 @@ to compile the code use
 make [target]
 ```
 where target = [mainseq, mainffa2a, mainmpi, mainpirr]
+
+## Local Execution 
+
+Each code has a specific set of parameters which will be listed below:
+
+### Sequential
+
+Usage:
+```bash
+ ./mainseq [options] [full-path-to-file-or-directory]
+```
+Main options:
+ -t set the "BIG file" low threshold (in Mbyte -- min. and default 2 Mbyte)
+ -C compress: 0 preserves, 1 removes the original file (default C=0)
+ -D decompress: 0 preserves, 1 removes the original file (default D=0)
+
+### FastFlow
+
+Usage:
+```bash
+ ./mainffa2a [options] [full-path-to-file-or-directory]
+```
+Main options:
+ -l set the n. of Left Workers (default nworkers=2)
+ -w set the n. of Right Workers (default nworkers=5)
+ -t set the "BIG file" low threshold (in Mbyte -- min. and default 2 Mbyte)
+ -C compress: 0 preserves, 1 removes the original file (default C=0)
+ -D decompress: 0 preserves, 1 removes the original file
+
+### MPI
+
+Usage:
+```bash
+ mpirun -n [N] ./mainffa2a [options] [full-path-to-file-or-directory]
+```
+
+with N>1 being the number of processes
+
+Main options:
+ -t set the "BIG file" low threshold (in Mbyte -- min. and default 2 Mbyte)
+ -C compress: 0 preserves, 1 removes the original file (default C=0)
+ -D decompress: 0 preserves, 1 removes the original file
+
+
+
+
+## Execution on the SPM Cluster Machine Backend nodes.
+
+To run the code on the cluster, change the desired scripts in the `.script/` folder with the parameters of choice
+
 
 
 
