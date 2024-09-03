@@ -35,7 +35,10 @@ where target = [mainseq, mainffa2a, mainmpi, mainpirr]
 
 ## Local Execution 
 
-Each code has a specific set of parameters which will be listed below:
+Each code has a set of available options, with the common one being:
+ - -t set the "BIG file" low threshold (in Mbyte -- min. and default 2 Mbyte)
+ - -C compress: 0 preserves, 1 removes the original file (default C=0)
+ - -D decompress: 0 preserves, 1 removes the original file (default D=0)
 
 ### Sequential
 
@@ -43,10 +46,6 @@ Usage:
 ```bash
  ./mainseq [options] [full-path-to-file-or-directory]
 ```
-Main options:
- -t set the "BIG file" low threshold (in Mbyte -- min. and default 2 Mbyte)
- -C compress: 0 preserves, 1 removes the original file (default C=0)
- -D decompress: 0 preserves, 1 removes the original file (default D=0)
 
 ### FastFlow
 
@@ -54,12 +53,9 @@ Usage:
 ```bash
  ./mainffa2a [options] [full-path-to-file-or-directory]
 ```
-Main options:
+Further options:
  -l set the n. of Left Workers (default nworkers=2)
  -w set the n. of Right Workers (default nworkers=5)
- -t set the "BIG file" low threshold (in Mbyte -- min. and default 2 Mbyte)
- -C compress: 0 preserves, 1 removes the original file (default C=0)
- -D decompress: 0 preserves, 1 removes the original file
 
 ### MPI
 
@@ -69,11 +65,6 @@ Usage:
 ```
 
 with N>1 being the number of processes
-
-Main options:
- -t set the "BIG file" low threshold (in Mbyte -- min. and default 2 Mbyte)
- -C compress: 0 preserves, 1 removes the original file (default C=0)
- -D decompress: 0 preserves, 1 removes the original file
 
 
 
