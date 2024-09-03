@@ -40,16 +40,14 @@ Each code has a set of available options, with the common one being:
  - -C compress: 0 preserves, 1 removes the original file (default C=0)
  - -D decompress: 0 preserves, 1 removes the original file (default D=0)
 
-### Sequential
+#### Sequential
 
-Usage:
 ```bash
  ./mainseq [options] [full-path-to-file-or-directory]
 ```
 
-### FastFlow
+#### FastFlow
 
-Usage:
 ```bash
  ./mainffa2a [options] [full-path-to-file-or-directory]
 ```
@@ -57,9 +55,8 @@ Further options:
  -l set the n. of Left Workers (default nworkers=2)
  -w set the n. of Right Workers (default nworkers=5)
 
-### MPI
+#### MPI
 
-Usage:
 ```bash
  mpirun -n [N] ./mainffa2a [options] [full-path-to-file-or-directory]
 ```
