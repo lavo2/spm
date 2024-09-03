@@ -1,6 +1,11 @@
 # SPM Project 2 - Lavorini Marco
 
-Project for the SPM course @UniPi 
+Project for the SPM course @UniPi - Master degree in CS, AI Curricula
+
+## Overview
+
+The project contains 4 version of the second project's task. The sequential version `mainseq.cpp`, the FastFlow version with the given constraint `mainffa2a.cpp`, an MPI version where the main process act as a worker `mainmpi.cpp`, another MPI version with a farm-like structure `mainmpirr.cpp`
+
 
 # project Structure
 
@@ -26,6 +31,7 @@ to compile the code use
 ```bash
 make [target]
 ```
+where target = [mainseq, mainffa2a, mainmpi, mainpirr]
 
 
 
