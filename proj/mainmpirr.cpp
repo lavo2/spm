@@ -71,17 +71,17 @@ int main(int argc, char* argv[]) {
 
     double start_time = MPI_Wtime();
 
+    // "header" to broadcast the number of files and the number of files each process will receive
     InitialHeader bcastData;
     if (!myrank){
-        // take time with MPI
-        //start_time = MPI_Wtime();
+        // read the files and store the data in fileDataVec
         if (walkDirAndGetFiles(argv[start], fileDataVec, comp)) {
             if(VERBOSE) std::cout << "Files processed successfully." << std::endl;
 
             fileDataTestVec.reserve(fileDataVec.size());
-            
+            //for each file in fileDataVec, create a FileData_test object and store it in fileDataTestVec
             for (size_t f = 0; f < fileDataVec.size(); ++f) {
-                if(!comp) {
+                if(!comp) { // decompression
                     //read the first 8 bytes to get the number of blocks
                     size_t offset = 0;
                     size_t nblocks = 0;
@@ -95,10 +95,13 @@ int main(int argc, char* argv[]) {
                         offset += sizeof(size_t);
                         blockSizes.push_back(blocksize);
                     }
+                    // save the size of the last block uncompressed
                     size_t lastblocksize = 0;
                     std::memcpy(&lastblocksize, fileDataVec[f].data.data() + offset, sizeof(size_t));
+                    // save the offset for later use
                     offset += sizeof(size_t);
                     FileData_test fdt;
+                    // for each block create the FileData_test object with all the infos and store it in fileDataTestVec
                     for(size_t i = 0; i < nblocks; ++i) {
                         std::memcpy(fdt.filename, fileDataVec[f].filename, sizeof(fdt.filename));
                         fdt.filename[sizeof(fdt.filename) - 1] = '\0';
