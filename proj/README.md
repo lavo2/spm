@@ -32,7 +32,9 @@ to compile the code use
 ```bash
 make [target]
 ```
-where target = [mainseq, mainffa2a, mainmpi, mainpirr]
+where target = [mainseq, mainffa2a, mainmpi, mainpirr].
+
+For the FastFlow execution remember to run the `mapping_strings.sh` script in the `ff/` folder.
 
 ## Local Execution 
 
@@ -75,23 +77,16 @@ To run the code on the cluster, simply change the parameters in the desire scrip
 sbatch [path-to-script]
 ```
 
+Each script has a specific purpose for a specific test. 
+- For strong scaling, change the dataset as the [full-path-to-file-or-directory], and the #SBATCH parameters to specify the number of nodes etc.
+    - `run_experiment_seq_test.sh`
+    - `run_experiment_ff_test.sh`
+    - `run_experiment_mpi_test.sh`
+    - `run_experiment_mpirr_test.sh`
+- For weak scaling, a scaling dataset of 4MB per core was used for FastFlow and 16MB per node for MPI. For the MPI tests, run the script one time for each configuration.
+    - `run_experiment_seq_weak.sh`
+    - `run_experiment_ff_weak.sh`
+    - `run_experiment_mpi_weak.sh`
+    - `run_experiment_mpirr_weak.sh`
 
 
-
-
-
-
-
-
-
-Usage: ./ffc_farm [options] file-or-directory [file-or-directory]
-
-Options:
- -n set the n. of Workers (default nworkers=8)
- -t set the "BIG file" low threshold (in Mbyte -- min. and default 2 Mbyte)
- -r 0 does not recur, 1 will process the content of all subdirectories (default r=0)
- -C compress: 0 preserves, 1 removes the original file (default C=0)
- -D decompress: 0 preserves, 1 removes the original file
- -q 0 silent mode, 1 prints only error messages to stderr, 2 verbose (default q=1)
- -a asynchrony degree for the on-demand policy (default a=1)
- -b 0 blocking, 1 non-blocking concurrency control (default b=0)
