@@ -18,10 +18,11 @@ The project contains 4 version of the second project's task. The sequential vers
 │   ├── mainmpirr.cpp           # Second version of the MPI code
 │   ├── [other /.h files]       # utils
 │   └── Makefile                # Makefile to build the project
-├── scripts/
+├── script/
 │   └── run.sh                  # Script to execute the compiled binary
 ├── fastflow/
 │   └── ff/                     # The FastFlow folder should be here to correcly build the project
+├── miniz/                      # The miniz folder should be here 
 └── README.md                   # This README file
 ```
 
@@ -58,7 +59,7 @@ Further options:
 #### MPI
 
 ```bash
- mpirun -n [N] ./mainffa2a [options] [full-path-to-file-or-directory]
+ mpirun -n [N] ./mainmpi(rr) [options] [full-path-to-file-or-directory]
 ```
 
 with N>1 being the number of processes
@@ -68,7 +69,11 @@ with N>1 being the number of processes
 
 ## Execution on the SPM Cluster Machine Backend nodes.
 
-To run the code on the cluster, change the desired scripts in the `.script/` folder with the parameters of choice
+To run the code on the cluster, simply change the parameters in the desire script inside the folder `./script/`, then run
+
+```bash
+sbatch [path-to-script]
+```
 
 
 
@@ -78,12 +83,6 @@ To run the code on the cluster, change the desired scripts in the `.script/` fol
 
 
 
-
-./mainseq -C 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small"  
-./mainseq -D 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small"  
-
-./mainseq -C 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small/file_1KB.txt" 
-./mainseq -D 1 -r 1 -q 2 "/Users/lavo/Desktop/Projects/spm/proj2/dataset/small/file_1KB.txt.zip" 
 
 Usage: ./ffc_farm [options] file-or-directory [file-or-directory]
 
