@@ -1,6 +1,6 @@
 # SPM Project 2 - Lavorini Marco
 
-Project for the SPM course @UniPi - Master degree in CS, AI Curricula
+Project for the SPM course @UniPi - Master degree in CS, AI Curriculum
 
 ## Overview
 
@@ -11,7 +11,7 @@ The project contains 4 version of the second project's task. The sequential vers
 
 ```plaintext
 .
-├── proj/                        # Directory containing source code files
+├── proj/                       # Directory containing source code files
 │   ├── mainseq.cpp             # Main code for the sequential implementation
 │   ├── mainffa2a.cpp           # Main code for the FastFlow implementation
 │   ├── mainmpi.cpp             # Main code for the MPI implementation [MPI-H]
@@ -26,7 +26,7 @@ The project contains 4 version of the second project's task. The sequential vers
 └── README.md                   # This README file
 ```
 
-## Compilation
+## Compiling
 to compile the code use
 
 ```bash
