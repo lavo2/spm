@@ -26,7 +26,7 @@ The project contains 4 version of the second project's task. The sequential vers
 └── README.md                   # This README file
 ```
 
-## Compiling
+## Compiling instruction
 to compile the code use
 
 ```bash
