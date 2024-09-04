@@ -89,4 +89,6 @@ Each script has a specific purpose for a specific test.
     - `run_experiment_mpi_weak.sh`
     - `run_experiment_mpirr_weak.sh`
 
+Note that the results will be saved on a `.txt` file in the directory of the execution of the script.
+
 
