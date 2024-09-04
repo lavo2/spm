@@ -11,18 +11,18 @@ The project contains 4 version of the second project's task. The sequential vers
 
 ```plaintext
 .
-├── prj/                        # Directory containing source code files
+├── proj/                        # Directory containing source code files
 │   ├── mainseq.cpp             # Main code for the sequential implementation
 │   ├── mainffa2a.cpp           # Main code for the FastFlow implementation
 │   ├── mainmpi.cpp             # Main code for the MPI implementation [MPI-H]
 │   ├── mainmpirr.cpp           # Second version of the MPI code
 │   ├── [other /.h files]       # utils
+│   ├── miniz/                  # The miniz folder should be here 
 │   └── Makefile                # Makefile to build the project
 ├── script/
 │   └── run.sh                  # Script to execute the compiled binary
 ├── fastflow/
 │   └── ff/                     # The FastFlow folder should be here to correcly build the project
-├── miniz/                      # The miniz folder should be here 
 └── README.md                   # This README file
 ```
 
