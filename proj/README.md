@@ -78,12 +78,12 @@ sbatch [path-to-script]
 ```
 
 Each script has a specific purpose for a specific test. 
-- For strong scaling, change the dataset as the [full-path-to-file-or-directory], and the #SBATCH parameters to specify the number of nodes etc.
+- For strong scaling, change the dataset as the `[full-path-to-file-or-directory]`, and the `#SBATCH` parameters to specify the number of nodes etc.
     - `run_experiment_seq_test.sh`
     - `run_experiment_ff_test.sh`
     - `run_experiment_mpi_test.sh`
     - `run_experiment_mpirr_test.sh`
-- For weak scaling, a scaling dataset of 4MB per core was used for FastFlow and 16MB per node for MPI. For the MPI tests, run the script one time for each configuration.
+- For weak scaling, a scaling dataset of `4MB` per core was used for FastFlow and `16MB` per node for MPI. For the MPI tests, run the script one time for each configuration.
     - `run_experiment_seq_weak.sh`
     - `run_experiment_ff_weak.sh`
     - `run_experiment_mpi_weak.sh`
